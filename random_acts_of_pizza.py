@@ -2,32 +2,113 @@ from __future__ import print_function
 import json
 import re
 import csv
+import numpy as np
+import nltk
+import datetime
+from nltk.corpus import stopwords
+from sklearn.feature_extraction.text import CountVectorizer
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import cross_val_score
+
+feature_mapping = {
+	"request_id": "request_id",
+	"requester_account_age_in_days_at_request": "acct_age_in_days",
+	"requester_days_since_first_post_on_raop_at_request": "days_since_first_post_on_raop",
+	"requester_number_of_comments_at_request": "acct_no_of_comments",
+	"requester_number_of_comments_in_raop_at_request": "acct_no_of_comments_in_raop",
+	"requester_number_of_posts_at_request": "acct_no_of_posts",
+	"requester_number_of_posts_on_raop_at_request": "acct_no_of_posts_in_raop",
+	"requester_number_of_subreddits_at_request": "no_of_subreddits_posted",
+	"unix_timestamp_of_request_utc": "request_month",
+	"unix_timestamp_of_request_utc": "request_day_of_year",
+	"requester_upvotes_plus_downvotes_at_request": "no_of_votes",
+	"requester_upvotes_minus_downvotes_at_request": "post_karma",
+	"requester_subreddits_at_request": "subreddits_posted",
+	"request_title": "title",
+	"request_text_edit_aware": "edited_text",
+	"requester_received_pizza": "success"
+}
+array_feature = "requester_subreddits_at_request"
+string_features = ["request_title", "request_text_edit_aware"]
+interested_features = ["request_id", "requester_account_age_in_days_at_request", "requester_days_since_first_post_on_raop_at_request", "requester_number_of_comments_at_request", "requester_number_of_comments_in_raop_at_request", "requester_number_of_posts_at_request", "requester_number_of_posts_on_raop_at_request", "requester_number_of_subreddits_at_request", "unix_timestamp_of_request_utc", "unix_timestamp_of_request_utc", "requester_upvotes_plus_downvotes_at_request", "requester_upvotes_minus_downvotes_at_request", "request_text_edit_aware", "request_text_edit_aware", "request_text_edit_aware", "requester_subreddits_at_request", "request_title", "request_text_edit_aware", "requester_received_pizza"]
 
 def cleanup(string):
-	string = re.sub("[^a-zA-Z\d\s.]", " ", string)
-	string = re.sub("([^\d])\.([^\d])",r"\1 \2",string)
+	if string == None:
+		return ""
+	string = re.sub("[^a-zA-Z\d\s]", " ", string)
+	string = string.replace("\n", " ").replace("\r", "").replace("\t", " ").strip(" ")
 	string = re.sub("\s{2,}", " ", string)
-	return string.strip(" ")
+	return string
 
-def dict_to_csv():
-	with open('data/train.json') as data_file:
-		data = json.load(data_file)
-	keys = data[0].keys()
-	str_fields = ['request_title', 'request_text', 'request_text_edit_aware']
-	array_field = "requester_subreddits_at_request"
-	other_keys = [x for x in keys if x not in str_fields and x != array_field]
-	print(','.join(other_keys + [array_field] + str_fields))
+def array_to_str(array):
+	return u','.join(map(lambda x: cleanup(x), array)).encode('utf-8')
+
+def month_of_year(unix_timestamp):
+	return int(datetime.datetime.fromtimestamp(int(unix_timestamp)).strftime('%m'))
+
+def day_of_year(unix_timestamp):
+	return int(datetime.datetime.fromtimestamp(int(unix_timestamp)).strftime('%j'))
+
+def dict_to_csv(filename, output_file_name):
+	with open(filename) as data_file:
+		data = json.load(data_file)	
+	output_file = open(output_file_name, 'w')
+	headers = ["request_id",
+	"acct_age_in_days",
+	"days_since_first_post_on_raop",
+	"acct_no_of_comments",
+	"acct_no_of_comments_in_raop",
+	"acct_no_of_posts",
+	"acct_no_of_posts_in_raop",
+	"no_of_subreddits_posted",
+	"request_month",
+	"request_day_of_year",
+	"no_of_votes",
+	"post_karma",
+	"pos_score",
+	"neg_score",
+	"neutral_score",
+	"subreddits_posted",
+	"title",
+	"edited_text",
+	"success"]
+	sid = SentimentIntensityAnalyzer()
+	print(','.join(headers), file = output_file)
 	for record in data:
-		normal_values = map(lambda x: str(record[x]), other_keys)
-		array_value = '"'+ u' '.join(record[array_field]).encode('utf-8') +'"'
-		quoted_values = map(lambda x: '"' + cleanup(record[x]) + '"', str_fields)
-		print(u','.join(normal_values + [array_value] + quoted_values).encode('utf-8'))
+		values = []
+		values.append(record["request_id"])
+		values.append(float(record["requester_account_age_in_days_at_request"]))
+		values.append(float(record["requester_days_since_first_post_on_raop_at_request"]))
+		values.append(float(record["requester_number_of_comments_at_request"]))
+		values.append(float(record["requester_number_of_comments_in_raop_at_request"]))
+		values.append(float(record["requester_number_of_posts_at_request"]))
+		values.append(float(record["requester_number_of_posts_on_raop_at_request"]))
+		values.append(float(record["requester_number_of_subreddits_at_request"]))
+		values.append(month_of_year(float(record["unix_timestamp_of_request_utc"])))
+		values.append(day_of_year(float(record["unix_timestamp_of_request_utc"])))
+		values.append(float(record["requester_upvotes_plus_downvotes_at_request"]))
+		values.append(float(record["requester_upvotes_minus_downvotes_at_request"]))
+		post_text = cleanup(record["request_text_edit_aware"])
+		scores = sid.polarity_scores(post_text)
+		values.append(scores['pos'])
+		values.append(scores['neg'])
+		values.append(scores['neu'])
+		values.append('"'+array_to_str(record["requester_subreddits_at_request"]) +'"')
+		values.append('"'+cleanup(record["request_title"])+ '"')
+		values.append('"'+post_text + '"')
+		if record.has_key("requester_received_pizza"):
+			values.append(1 if bool(record["requester_received_pizza"]) else 0)
+		else:
+			values.append('0')
+		print(len(values))
+		print(u','.join(map(str, values)).encode('utf-8'), file = output_file)
+	output_file.close()
 
 def read_lines_from_file(input_file):
 	lines = []
 	with open(input_file, "rb") as file:
-		reader = csv.reader(file, delimiter = ",", )
+		reader = csv.reader(file, delimiter = ",")
 		headers = next(reader, None)
 		for line in reader:
 			lines.append(line)
@@ -49,11 +130,37 @@ def add_sentiment_scores(lines_in_file, headers):
 		line.insert(14, scores['neg'])
 		line.insert(15, scores['neu'])
 
-if __name__ == '__main__':
-	(lines, headers) = read_lines_from_file('data/filtered_features_new.csv')
-	add_sentiment_scores(lines, headers)
-	output_file = open("data/filtered_features_w_senti.csv", 'w')
-	print(','.join(headers[1:]), file = output_file)
-	for line in lines:
-		print(','.join(map(str, line[1:])), file = output_file)
+def generate_bag_of_word_features(post_texts):
+	vectorizer = CountVectorizer(analyzer = "word", tokenizer = nltk.word_tokenize, preprocessor = None, stop_words = stopwords.words('english'), max_features = 10000)
+	return vectorizer.fit_transform(post_texts).toarray()
+
+def train_random_forest_classifier():
+	(training_data, _) = read_lines_from_file('data/filtered_features_1.csv')
+	training_data = np.array(training_data)
+	forest = RandomForestClassifier(n_estimators = 100)
+	forest = forest.fit(training_data[:, 1:15].astype('float'), training_data[:, -1].astype('float'))
+	# forest.fit_transform(generate_bag_of_word_features(training_data[:, -2]), training_data[:, -1].astype('float'))	
+	# scores = cross_val_score(forest, generate_bag_of_word_features(training_data[:, -2]), training_data[:, -1].astype('float'), cv = 5)
+	scores = cross_val_score(forest, training_data[:, 1:15].astype('float'), training_data[:, -1].astype('float'), cv = 5)
+	print(scores)
+	print(np.mean(scores))
+	return forest
+
+def generate_submission_file(classifier, submission_filename):
+	(test_data, _) = read_lines_from_file('data/test_feature_file.csv')
+	test_data = np.array(test_data)
+	output_probabs=classifier.predict_proba(test_data[:, 1:15])
+	output_file = open(submission_filename, 'w')
+	print("request_id,requester_received_pizza", file = output_file)
+	for ind, record in enumerate(test_data):
+		print("%s,%f"%(record[0], output_probabs[ind][1]), file = output_file)
 	output_file.close()
+
+def generate_feature_files():
+	dict_to_csv('data/train.json', 'data/filtered_features_1.csv')
+	dict_to_csv('data/test.json', 'data/test_feature_file.csv')
+
+if __name__ == '__main__':
+	# generate_feature_files()
+	classifier = train_random_forest_classifier()
+	generate_submission_file(classifier, "numeric-features-prediction.csv")
