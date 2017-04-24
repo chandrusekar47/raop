@@ -41,13 +41,16 @@ def add_sentiment_scores(lines_in_file, headers):
 	sid = SentimentIntensityAnalyzer()
 	for line in lines_in_file:
 		post_text = line[text_index]
+		line[text_index] = line[text_index].replace("\n", "")
+		line[text_index] = line[text_index].replace("\t", "")
+		line[text_index] = line[text_index].replace("\r", "")
 		scores = sid.polarity_scores(post_text)
 		line.insert(13, scores['pos'])
 		line.insert(14, scores['neg'])
 		line.insert(15, scores['neu'])
 
 if __name__ == '__main__':
-	(lines, headers) = read_lines_from_file('data/filtered_features.csv')
+	(lines, headers) = read_lines_from_file('data/filtered_features_new.csv')
 	add_sentiment_scores(lines, headers)
 	output_file = open("data/filtered_features_w_senti.csv", 'w')
 	print(','.join(headers[1:]), file = output_file)
