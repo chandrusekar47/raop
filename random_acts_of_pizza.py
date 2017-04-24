@@ -111,18 +111,19 @@ def generate_bag_of_word_features(post_texts):
 	vectorizer = CountVectorizer(analyzer = "word", tokenizer = nltk.word_tokenize, preprocessor = None, stop_words = stopwords.words('english'), max_features = 10000)
 	return vectorizer.fit_transform(post_texts).toarray()
 
-def train_random_forest_classifier():
+def train_random_forest_classifier(n_est = 100):
 	(training_data, _) = read_lines_from_file('data/filtered_features.csv')
 	training_data = np.array(training_data)
-	forest = RandomForestClassifier(n_estimators = 100)
+	forest = RandomForestClassifier(n_estimators = n_est)
 	forest.classes_ = [0, 1]
 	forest = forest.fit(training_data[:, 1:15].astype('float'), training_data[:, -1].astype('float'))
 	# forest.fit_transform(generate_bag_of_word_features(training_data[:, -2]), training_data[:, -1].astype('float'))	
 	# scores = cross_val_score(forest, generate_bag_of_word_features(training_data[:, -2]), training_data[:, -1].astype('float'), cv = 5)
 	scores = cross_val_score(forest, training_data[:, 1:15].astype('float'), training_data[:, -1].astype('float'), cv = 5)
+	print('Results with ' + str(n_est) + ' estimators')
 	print(scores)
 	print(np.mean(scores))
-	return forest
+	return forest, np.mean(scores)
 
 def generate_submission_file(classifier, submission_filename):
 	(test_data, _) = read_lines_from_file('data/test_feature_file.csv')
@@ -140,5 +141,12 @@ def generate_feature_files():
 
 if __name__ == '__main__':
 	generate_feature_files()
-	classifier = train_random_forest_classifier()
+	estimators = [25, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300]
+	results = {}
+	for e in estimators:
+		classifier, score = train_random_forest_classifier(e)
+		results[e] = score
+	optimal = max(results, key=results.get)
+	print('\nOptimal results found with ' + str(optimal) + ' estimators.\n')
+	classifier, score = train_random_forest_classifier(optimal)
 	generate_submission_file(classifier, "numeric-features-prediction.csv")
