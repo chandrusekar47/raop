@@ -11,28 +11,6 @@ from nltk.sentiment.vader import SentimentIntensityAnalyzer
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import cross_val_score
 
-feature_mapping = {
-	"request_id": "request_id",
-	"requester_account_age_in_days_at_request": "acct_age_in_days",
-	"requester_days_since_first_post_on_raop_at_request": "days_since_first_post_on_raop",
-	"requester_number_of_comments_at_request": "acct_no_of_comments",
-	"requester_number_of_comments_in_raop_at_request": "acct_no_of_comments_in_raop",
-	"requester_number_of_posts_at_request": "acct_no_of_posts",
-	"requester_number_of_posts_on_raop_at_request": "acct_no_of_posts_in_raop",
-	"requester_number_of_subreddits_at_request": "no_of_subreddits_posted",
-	"unix_timestamp_of_request_utc": "request_month",
-	"unix_timestamp_of_request_utc": "request_day_of_year",
-	"requester_upvotes_plus_downvotes_at_request": "no_of_votes",
-	"requester_upvotes_minus_downvotes_at_request": "post_karma",
-	"requester_subreddits_at_request": "subreddits_posted",
-	"request_title": "title",
-	"request_text_edit_aware": "edited_text",
-	"requester_received_pizza": "success"
-}
-array_feature = "requester_subreddits_at_request"
-string_features = ["request_title", "request_text_edit_aware"]
-interested_features = ["request_id", "requester_account_age_in_days_at_request", "requester_days_since_first_post_on_raop_at_request", "requester_number_of_comments_at_request", "requester_number_of_comments_in_raop_at_request", "requester_number_of_posts_at_request", "requester_number_of_posts_on_raop_at_request", "requester_number_of_subreddits_at_request", "unix_timestamp_of_request_utc", "unix_timestamp_of_request_utc", "requester_upvotes_plus_downvotes_at_request", "requester_upvotes_minus_downvotes_at_request", "request_text_edit_aware", "request_text_edit_aware", "request_text_edit_aware", "requester_subreddits_at_request", "request_title", "request_text_edit_aware", "requester_received_pizza"]
-
 def cleanup(string):
 	if string == None:
 		return ""
@@ -101,7 +79,6 @@ def dict_to_csv(filename, output_file_name):
 			values.append(1 if bool(record["requester_received_pizza"]) else 0)
 		else:
 			values.append('0')
-		print(len(values))
 		print(u','.join(map(str, values)).encode('utf-8'), file = output_file)
 	output_file.close()
 
@@ -135,9 +112,10 @@ def generate_bag_of_word_features(post_texts):
 	return vectorizer.fit_transform(post_texts).toarray()
 
 def train_random_forest_classifier():
-	(training_data, _) = read_lines_from_file('data/filtered_features_1.csv')
+	(training_data, _) = read_lines_from_file('data/filtered_features.csv')
 	training_data = np.array(training_data)
 	forest = RandomForestClassifier(n_estimators = 100)
+	forest.classes_ = [0, 1]
 	forest = forest.fit(training_data[:, 1:15].astype('float'), training_data[:, -1].astype('float'))
 	# forest.fit_transform(generate_bag_of_word_features(training_data[:, -2]), training_data[:, -1].astype('float'))	
 	# scores = cross_val_score(forest, generate_bag_of_word_features(training_data[:, -2]), training_data[:, -1].astype('float'), cv = 5)
@@ -157,10 +135,10 @@ def generate_submission_file(classifier, submission_filename):
 	output_file.close()
 
 def generate_feature_files():
-	dict_to_csv('data/train.json', 'data/filtered_features_1.csv')
+	dict_to_csv('data/train.json', 'data/filtered_features.csv')
 	dict_to_csv('data/test.json', 'data/test_feature_file.csv')
 
 if __name__ == '__main__':
-	# generate_feature_files()
+	generate_feature_files()
 	classifier = train_random_forest_classifier()
 	generate_submission_file(classifier, "numeric-features-prediction.csv")
