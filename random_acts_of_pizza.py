@@ -10,6 +10,12 @@ from sklearn.feature_extraction.text import CountVectorizer
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import cross_val_score
+from sklearn.linear_model import LogisticRegression
+from sklearn.naive_bayes import GaussianNB
+from sklearn.ensemble import VotingClassifier
+
+
+
 
 def cleanup(string):
 	if string == None:
@@ -127,7 +133,7 @@ def train_random_forest_classifier():
 def generate_submission_file(classifier, submission_filename):
 	(test_data, _) = read_lines_from_file('data/test_feature_file.csv')
 	test_data = np.array(test_data)
-	output_probabs=classifier.predict_proba(test_data[:, 1:15])
+	output_probabs=classifier.predict_proba(test_data[:, 1:15].astype('float'))
 	output_file = open(submission_filename, 'w')
 	print("request_id,requester_received_pizza", file = output_file)
 	for ind, record in enumerate(test_data):
@@ -138,7 +144,39 @@ def generate_feature_files():
 	dict_to_csv('data/train.json', 'data/filtered_features.csv')
 	dict_to_csv('data/test.json', 'data/test_feature_file.csv')
 
+
+def voting_classifier():
+	(training_data, _) = read_lines_from_file('data/filtered_features.csv')
+	training_data = np.array(training_data)
+	clf1 = LogisticRegression(random_state=1)
+	clf2 = RandomForestClassifier(random_state=1)
+	clf3 = GaussianNB()
+	X = (training_data[:, 1:15].astype('float'))
+	y = (training_data[:, -1].astype('float'))
+	eclf1 = VotingClassifier(estimators=[
+	        ('lr', clf1), ('rf', clf2), ('gnb', clf3)], voting='hard')
+	eclf1 = eclf1.fit(X, y)
+	print(eclf1.predict(X))
+
+	eclf2 = VotingClassifier(estimators=[
+	        ('lr', clf1), ('rf', clf2), ('gnb', clf3)],
+	        voting='soft')
+	eclf2 = eclf2.fit(X, y)
+	print(eclf2.predict(X))
+
+	eclf3 = VotingClassifier(estimators=[
+	       ('lr', clf1), ('rf', clf2), ('gnb', clf3)],
+	       voting='soft', weights=[2,1,1])
+	eclf3 = eclf3.fit(X, y)
+	#print(eclf3.predict_proba(test_data[:, 1:15].astype('float')))
+	scores = cross_val_score(eclf3, training_data[:, 1:15].astype('float'), training_data[:, -1].astype('float'), cv = 5)
+	print(scores)
+	print(np.mean(scores))
+	return eclf3
+
+
 if __name__ == '__main__':
 	generate_feature_files()
-	classifier = train_random_forest_classifier()
+	classifier=voting_classifier()
+	#classifier = train_random_forest_classifier()
 	generate_submission_file(classifier, "numeric-features-prediction.csv")
