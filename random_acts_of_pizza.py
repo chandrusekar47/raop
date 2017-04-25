@@ -24,6 +24,37 @@ vectorizer = CountVectorizer(analyzer = "word", tokenizer = nltk.word_tokenize, 
 Training_bag_of_words_features = []
 Testing_bag_of_words_features = []
 selected_features = [1,2,4,6,7,8,14,16,17,18]
+headers = ["request_id",
+	"acct_age_in_days",
+	"days_since_first_post_on_raop",
+	"acct_no_of_comments",
+	"acct_no_of_comments_in_raop",
+	"acct_no_of_posts",
+	"acct_no_of_posts_in_raop",
+	"no_of_subreddits_posted",
+	"request_month",
+	"request_day_of_year",
+	"no_of_votes",
+	"post_karma",
+	"pos_score",
+	"neg_score",
+	"neutral_score",
+	"no_words_title",
+	"no_words_posts",
+	"title_length",
+	"post_length",
+	"pos_words_percent",
+	"neg_words_percent",
+	"neutral_words_percent",
+	"post_adj_words_percent",
+	"title_adj_words_percent",
+	"subreddits_posted",
+	"title",
+	"edited_text",
+	"success"]
+selected_features = map(headers.index, ["days_since_first_post_on_raop","no_words_posts","post_length","acct_no_of_comments_in_raop","acct_no_of_posts_in_raop", "pos_score", "neg_score", "request_month", "pos_words_percent", "neg_words_percent", "request_day_of_year"])
+# todo: change this have the name of the feature like the previous line
+selected_features = [1,2,4,6,7,8,14,16,17,18]
 
 def cleanup(string):
 	if string == None:
@@ -62,34 +93,6 @@ def dict_to_csv(filename, output_file_name):
 	with open(filename) as data_file:
 		data = json.load(data_file)	
 	output_file = open(output_file_name, 'w')
-	headers = ["request_id",
-	"acct_age_in_days",
-	"days_since_first_post_on_raop",
-	"acct_no_of_comments",
-	"acct_no_of_comments_in_raop",
-	"acct_no_of_posts",
-	"acct_no_of_posts_in_raop",
-	"no_of_subreddits_posted",
-	"request_month",
-	"request_day_of_year",
-	"no_of_votes",
-	"post_karma",
-	"pos_score",
-	"neg_score",
-	"neutral_score",
-	"no_words_title",
-	"no_words_posts",
-	"title_length",
-	"post_length",
-	"pos_words_percent",
-	"neg_words_percent",
-	"neutral_words_percent",
-	"post_adj_words_percent",
-	"title_adj_words_percent",
-	"subreddits_posted",
-	"title",
-	"edited_text",
-	"success"]
 	print(','.join(headers), file = output_file)
 	for record in data:
 		values = []
@@ -150,7 +153,7 @@ def generate_test_bag_of_word_features(post_texts):
 def train_random_forest_classifier(training_data, n_est=100, use_bag_of_words = False):
 	global Training_bag_of_words_features
 	vectorizer = CountVectorizer(analyzer = "word", tokenizer = nltk.word_tokenize, preprocessor = None, stop_words = stopwords.words('english'), max_features = 10000)
-	forest = RandomForestClassifier(n_estimators=n_est)
+	forest = RandomForestClassifier(n_estimators=n_est, class_weight = "balanced")
 	forest.classes_ = [0, 1]
 	if use_bag_of_words:
 		if Training_bag_of_words_features == []:
@@ -166,7 +169,8 @@ def train_random_forest_classifier(training_data, n_est=100, use_bag_of_words = 
 	return forest, np.mean(scores)
 
 def train_decision_tree_classifer(training_data, depth=50):
-	dtree = DecisionTreeClassifier(max_depth=depth, min_samples_split=2,random_state=0)
+	dtree = DecisionTreeClassifier(max_depth=depth, min_samples_split=2,class_weight = "balanced")
+	dtree.classes_ = [0, 1]
 	scores = cross_val_score(dtree, training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'), cv = 5)
 	print("Scores gotten using Decision Tree (max depth="+str(depth)+")")
 	print(scores)
@@ -174,7 +178,8 @@ def train_decision_tree_classifer(training_data, depth=50):
 	return dtree, np.mean(scores)
 
 def train_extra_Randomized_forest_classifer(training_data, n_est=10):
-	randomized = ExtraTreesClassifier(n_estimators=n_est, max_depth=None, min_samples_split=2, random_state=0)
+	randomized = ExtraTreesClassifier(n_estimators=n_est, max_depth=None, min_samples_split=2, class_weight = "balanced")
+	randomized.classes_ = [0, 1]
 	scores = cross_val_score(randomized, training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'), cv = 10)
 	print("Scores gotten using Extra Randomized Forests (# of estimators="+str(n_est)+")")
 	print(scores)
@@ -183,6 +188,7 @@ def train_extra_Randomized_forest_classifer(training_data, n_est=10):
 
 def train_AdaBoost_classifier(training_data, n_est):
 	adaboost = AdaBoostClassifier(n_estimators=n_est)
+	adaboost.classes_ = [0, 1]
 	scores = cross_val_score(adaboost, training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'), cv = 10)
 	adaboost = adaboost.fit(training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'))
 	print("Scores gotten using AdaBoost classifier (# of estimators="+str(n_est)+")")
@@ -191,7 +197,8 @@ def train_AdaBoost_classifier(training_data, n_est):
 	return adaboost, np.mean(scores)
 
 def train_ensemble_classifier(training_data,forest, dtree, adaboost, extra_random, gnb, regression):
-	ensemble = VotingClassifier(estimators=[('rf', forest), ('dt', dtree), ('ab', adaboost),('et',extra_random),('gnb',gnb),('lr',regression)], voting='hard')
+	ensemble = VotingClassifier(estimators=[('rf', forest), ('dt', dtree), ('et',extra_random),('gnb',gnb),('lr',regression)], voting='hard')
+	ensemble.classes_ = [0, 1]
 	scores = cross_val_score(ensemble, training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'), cv = 5)
 	print("Scores gotten using Ensemble classifier")
 	print(str(scores))
@@ -202,7 +209,7 @@ def train_Logistic_regression(training_data):
 	x = (training_data[:, selected_features].astype('float'))
 	y = (training_data[:, -1].astype('float'))
 
-	clf1 = LogisticRegression(penalty = 'l1',random_state=1,class_weight='balanced')
+	clf1 = LogisticRegression(penalty = 'l1', class_weight='balanced')
 	clf1 = clf1.fit(x,y)
 
 	print("LOG REGRESSION COEFF : "+str(clf1.coef_) )#acess coefficients
@@ -227,7 +234,8 @@ def generate_submission_file(classifier, submission_filename, use_bag_of_words =
 			Testing_bag_of_words_features = generate_test_bag_of_word_features(test_data[:, -2])
 		output_probabs=classifier.predict_proba(Testing_bag_of_words_features)
 	else:
-		output_probabs=classifier.predict_proba(test_data[:, selected_features].astype('float'))
+		output_probabs=classifier.predict_proba(test_data[:, selected_features])
+	print(np.any(np.array(output_probabs) > 0))
 	output_file = open(submission_filename, 'w')
 	print("request_id,requester_received_pizza", file = output_file)
 	for ind, record in enumerate(test_data):
