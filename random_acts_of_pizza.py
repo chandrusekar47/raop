@@ -24,6 +24,15 @@ Training_bag_of_words_features = []
 Testing_bag_of_words_features = []
 selected_features = range(1, 23)
 
+narratives = ['money', 'job', 'student', 'family', 'craving']
+triggers = [
+	['money', 'now', 'broke', 'week', 'until', 'time', 'last', 'day', 'when', 'today', 'tonight', 'paid', 'next', 'first', 'night', 'after', 'tomorrow', 'month', 'while', 'account', 'before', 'long', 'Friday', 'rent', 'buy', 'bank', 'still', 'bills', 'bills', 'ago', 'cash', 'due', 'due', 'soon', 'past', 'never', 'paycheck', 'check', 'spent', 'years', 'poor', 'till', 'yesterday', 'morning', 'dollars', 'financial', 'hour', 'bill', 'evening', 'credit', 'budget', 'loan', 'bucks', 'deposit', 'dollar', 'current', 'payed'],
+	['work', 'job', 'paycheck', 'unemployment', 'interview', 'fired', 'employment', 'hired', 'hire'],
+	['college', 'student', 'school', 'roommate', 'studying', 'university', 'finals', 'semester', 'class', 'study', 'project', 'dorm', 'tuition'],
+	['family', 'mom', 'wife', 'parents', 'mother', 'husband', 'dad', 'son', 'daughter', 'father', 'parent', 'mum'],
+	['friend', 'girlfriend', 'craving', 'birthday', 'boyfriend', 'celebrate', 'party', 'game', 'games', 'movie', 'date', 'drunk', 'beer', 'celebrating', 'invited', 'drinks', 'crave', 'wasted', 'invite']
+]
+
 def cleanup(string):
 	if string == None:
 		return ""
@@ -56,6 +65,13 @@ def get_adjectives(text):
 	text = nltk.word_tokenize(text)
 	return map(lambda x: x[0], filter(lambda x: x[1] == "JJ", nltk.pos_tag(text)))
 
+def get_narrative(text):
+	counts = [0, 0, 0, 0, 0]
+	for w in text.split(' '):
+		for t in range(len(narratives)):
+			if w in triggers[t]:
+				counts[t] += 1
+	return narratives[counts.index(max(counts))]
 
 def dict_to_csv(filename, output_file_name):
 	with open(filename) as data_file:
@@ -88,6 +104,7 @@ def dict_to_csv(filename, output_file_name):
 	"subreddits_posted",
 	"title",
 	"edited_text",
+	"narrative",
 	"success"]
 	print(','.join(headers), file = output_file)
 	for record in data:
@@ -112,9 +129,9 @@ def dict_to_csv(filename, output_file_name):
 		values.append(scores['pos'])
 		values.append(scores['neg'])
 		values.append(scores['neu'])
-		values.append(num_words(title)) 
-		values.append(no_words) 
-		values.append(len(title)) 
+		values.append(num_words(title))
+		values.append(no_words)
+		values.append(len(title))
 		values.append(len(post_text))
 		values.append(len(pos_words)/no_words if no_words !=0 else 0)
 		values.append(len(neg_words)/no_words if no_words !=0 else 0)
@@ -124,6 +141,7 @@ def dict_to_csv(filename, output_file_name):
 		values.append('"'+array_to_str(record["requester_subreddits_at_request"]) +'"')
 		values.append('"'+title+ '"')
 		values.append('"'+post_text + '"')
+		values.append('"' + get_narrative(title + ' ' + post_text) + '"')
 		if record.has_key("requester_received_pizza"):
 			values.append(1 if bool(record["requester_received_pizza"]) else 0)
 		else:
@@ -159,7 +177,7 @@ def train_random_forest_classifier(training_data, n_est=100, use_bag_of_words = 
 	else:
 		forest = forest.fit(training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'))
 		scores = cross_val_score(forest, training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'), cv = 5)
-	print("Scores gotten using Decision Tree (# of estimators="+str(n_est)+")")
+	print("Scores gotten using Randomized Forest (# of estimators="+str(n_est)+")")
 	print(scores)
 	print(np.mean(scores))
 	return forest, np.mean(scores)
@@ -268,7 +286,7 @@ def voting_classifier():
 
 
 if __name__ == '__main__':
-	# generate_feature_files()
+	generate_feature_files()
 	(training_data, _) = read_lines_from_file('data/filtered_features.csv')
 	training_data = np.array(training_data)
 
@@ -304,6 +322,13 @@ if __name__ == '__main__':
 		ada_results.append(ada_score)
 	ada_optimal, _ = train_AdaBoost_classifier(training_data, ada_est[ada_results.index(max(ada_results))])
 
-	classifier = train_ensemble_classifier(training_data, rf_optimal, dt_optimal, ada_optimal, erf_optimal, gnb, regression)
+	ensemble_classifier = train_ensemble_classifier(training_data, rf_optimal, dt_optimal, ada_optimal, erf_optimal, gnb, regression)
 
-	generate_submission_file(classifier, "numeric-features-prediction.csv")
+	filename = "ensemble-prediction.csv"
+	generate_submission_file(ensemble_classifier, filename)
+
+	filename = "randomized-forest-prediction.csv"
+	generate_submission_file(rf_optimal, filename)
+
+	print('Done!')
+
