@@ -9,6 +9,10 @@ from nltk.corpus import stopwords
 from sklearn.feature_extraction.text import CountVectorizer
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import ExtraTreesClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import AdaBoostClassifier
+from sklearn.ensemble import VotingClassifier
 from sklearn.model_selection import cross_val_score
 from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import GaussianNB
@@ -117,18 +121,66 @@ def generate_bag_of_word_features(post_texts):
 	vectorizer = CountVectorizer(analyzer = "word", tokenizer = nltk.word_tokenize, preprocessor = None, stop_words = stopwords.words('english'), max_features = 10000)
 	return vectorizer.fit_transform(post_texts).toarray()
 
-def train_random_forest_classifier():
-	(training_data, _) = read_lines_from_file('data/filtered_features.csv')
-	training_data = np.array(training_data)
-	forest = RandomForestClassifier(n_estimators = 100)
-	forest.classes_ = [0, 1]
+
+def train_random_forest_classifier(training_data):
+	forest = RandomForestClassifier(n_estimators = 50)
+
 	forest = forest.fit(training_data[:, 1:15].astype('float'), training_data[:, -1].astype('float'))
+	forest.classes_ = [0, 1]
 	# forest.fit_transform(generate_bag_of_word_features(training_data[:, -2]), training_data[:, -1].astype('float'))	
 	# scores = cross_val_score(forest, generate_bag_of_word_features(training_data[:, -2]), training_data[:, -1].astype('float'), cv = 5)
 	scores = cross_val_score(forest, training_data[:, 1:15].astype('float'), training_data[:, -1].astype('float'), cv = 5)
 	print(scores)
 	print(np.mean(scores))
 	return forest
+
+def train_Decision_tree_classifer(training_data):
+	dtree = DecisionTreeClassifier(max_depth=50, min_samples_split=2,random_state=0)
+	scores = cross_val_score(dtree, training_data[:, 1:15].astype('float'), training_data[:, -1].astype('float'), cv = 5)
+	print("Scores got using Decision Tree"+str(scores))
+	print(np.mean(scores))
+	return dtree
+
+def train_extra_Randomized_forest_classifer(training_data):
+	randomized = ExtraTreesClassifier(n_estimators=10, max_depth=None, min_samples_split=2, random_state=0)
+	scores = cross_val_score(randomized, training_data[:, 1:15].astype('float'), training_data[:, -1].astype('float'), cv = 10)
+	print("Scores got using Extra Randomized Forests"+str(scores))
+	print(np.mean(scores))
+	return randomized
+
+def train_AdaBoostClassifier(training_data):
+	adaboost = AdaBoostClassifier(n_estimators=100)
+	scores = cross_val_score(adaboost, training_data[:, 1:15].astype('float'), training_data[:, -1].astype('float'), cv = 10)
+	adaboost = adaboost.fit(training_data[:, 1:15].astype('float'), training_data[:, -1].astype('float'))
+	print("Scores got using AdaBoost classifier "+str(scores))
+	print(np.mean(scores))
+	return adaboost
+
+def train_ensemble_classifier(training_data,forest, dtree, adaboost, extra_random, gnb, regression):
+	ensemble = VotingClassifier(estimators=[('rf', forest), ('dt', dtree), ('ab', adaboost),('et',extra_random),('gnb',gnb),('lr',regression)], voting='hard')
+	scores = cross_val_score(ensemble, training_data[:, 1:15].astype('float'), training_data[:, -1].astype('float'), cv = 5)
+	print("Scores got using Ensemble classifier : "+str(scores))
+	print(np.mean(scores))
+	return adaboost
+
+def train_Logistic_regression(training_data):
+	x = (training_data[:, 1:15].astype('float'))
+	y = (training_data[:, -1].astype('float'))
+
+	clf1 = LogisticRegression(random_state=1)
+	clf1 = clf1.fit(x,y)
+
+	return clf1
+
+def train_gaussian_NB(training_data):
+	x = (training_data[:, 1:15].astype('float'))
+	y = (training_data[:, -1].astype('float'))
+
+	gnb = GaussianNB()
+	gnb = gnb.fit(x,y)
+
+	return gnb
+
 
 def generate_submission_file(classifier, submission_filename):
 	(test_data, _) = read_lines_from_file('data/test_feature_file.csv')
@@ -177,6 +229,18 @@ def voting_classifier():
 
 if __name__ == '__main__':
 	generate_feature_files()
-	classifier=voting_classifier()
+	# classifier=voting_classifier()
 	#classifier = train_random_forest_classifier()
+	(training_data, _) = read_lines_from_file('data/filtered_features.csv')
+	training_data = np.array(training_data)
+
+	gnb = train_gaussian_NB(training_data)
+	regression = train_Logistic_regression(training_data)
+	forest = train_random_forest_classifier(training_data)
+	dtree = train_Decision_tree_classifer(training_data)
+	extra_random = train_extra_Randomized_forest_classifer(training_data)
+	adaboost = train_AdaBoostClassifier(training_data)
+
+	classifier = train_ensemble_classifier(training_data,forest, dtree, adaboost, extra_random, gnb, regression)
+
 	generate_submission_file(classifier, "numeric-features-prediction.csv")
