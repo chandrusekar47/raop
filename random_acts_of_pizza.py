@@ -17,12 +17,13 @@ from sklearn.model_selection import cross_val_score
 from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import GaussianNB
 from sklearn.ensemble import VotingClassifier
+import sklearn.preprocessing
 
 sentiment_analyzer = SentimentIntensityAnalyzer()
 vectorizer = CountVectorizer(analyzer = "word", tokenizer = nltk.word_tokenize, preprocessor = None, stop_words = stopwords.words('english'), max_features = 10000)
 Training_bag_of_words_features = []
 Testing_bag_of_words_features = []
-selected_features = range(1, 23)
+selected_features = [1,2,4,6,7,8,14,16,17,18]
 
 def cleanup(string):
 	if string == None:
@@ -159,7 +160,7 @@ def train_random_forest_classifier(training_data, n_est=100, use_bag_of_words = 
 	else:
 		forest = forest.fit(training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'))
 		scores = cross_val_score(forest, training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'), cv = 5)
-	print("Scores gotten using Decision Tree (# of estimators="+str(n_est)+")")
+	print("Scores gotten using Random Forest (# of estimators="+str(n_est)+")")
 	print(scores)
 	print(np.mean(scores))
 	return forest, np.mean(scores)
@@ -201,9 +202,10 @@ def train_Logistic_regression(training_data):
 	x = (training_data[:, selected_features].astype('float'))
 	y = (training_data[:, -1].astype('float'))
 
-	clf1 = LogisticRegression(random_state=1)
+	clf1 = LogisticRegression(penalty = 'l1',random_state=1,class_weight='balanced')
 	clf1 = clf1.fit(x,y)
 
+	print("LOG REGRESSION COEFF : "+str(clf1.coef_) )#acess coefficients
 	return clf1
 
 def train_gaussian_NB(training_data):
@@ -236,6 +238,18 @@ def generate_feature_files():
 	dict_to_csv('data/train.json', 'data/filtered_features.csv')
 	dict_to_csv('data/test.json', 'data/test_feature_file.csv')
 
+def generate_normalized_data(training_data):
+	num_records = len(training_data)
+	dimension = len(training_data[0])
+	print("num of records "+str(num_records))
+	print("num of features "+str(dimension))
+
+	minmax_scale = sklearn.preprocessing.MinMaxScaler(feature_range=(0, 1), copy=True)
+	for i in range(1,23):
+			training_data[:,i] = training_data[:,i].astype(float)			
+			training_data[:,i] = minmax_scale.fit_transform(training_data[:,i])
+	print(training_data[0])
+	return training_data
 
 def voting_classifier():
 	(training_data, _) = read_lines_from_file('data/filtered_features.csv')
@@ -268,24 +282,35 @@ def voting_classifier():
 
 
 if __name__ == '__main__':
-	# generate_feature_files()
+	generate_feature_files()
+	print("YOLO done generating features")
 	(training_data, _) = read_lines_from_file('data/filtered_features.csv')
 	training_data = np.array(training_data)
+
+	#training_data = generate_normalized_data(training_data)
+	#print("Normalization done")
+	#print(training_data[0])
+
+	regression = train_Logistic_regression(training_data)
+
+	print(regression.get_params())
 
 	rf_est = [50, 75, 100, 125, 150]
 	dt_depth = [10, 20, 30, 40, 50]
 	erf_est = [5, 10, 15, 20, 25]
 	ada_est = [50, 75, 100, 125, 150]
-
+	"""
 	gnb = train_gaussian_NB(training_data)
 	regression = train_Logistic_regression(training_data)
 
+	print(regression.get_params())	
+	"""
 	rf_results = []
 	for e in rf_est:
 		forest, rf_score = train_random_forest_classifier(training_data, e)
 		rf_results.append(rf_score)
 	rf_optimal, _ = train_random_forest_classifier(training_data, rf_est[rf_results.index(max(rf_results))])
-
+	"""
 	dt_results = []
 	for d in dt_depth:
 		dtree, dt_score = train_decision_tree_classifer(training_data, d)
@@ -305,5 +330,6 @@ if __name__ == '__main__':
 	ada_optimal, _ = train_AdaBoost_classifier(training_data, ada_est[ada_results.index(max(ada_results))])
 
 	classifier = train_ensemble_classifier(training_data, rf_optimal, dt_optimal, ada_optimal, erf_optimal, gnb, regression)
-
-	generate_submission_file(classifier, "numeric-features-prediction.csv")
+	"""
+	generate_submission_file(rf_optimal, "numeric-features-prediction.csv")
+	
