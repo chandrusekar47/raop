@@ -21,6 +21,10 @@ from sklearn.ensemble import VotingClassifier
 
 
 
+vectorizer = CountVectorizer(analyzer = "word", tokenizer = nltk.word_tokenize, preprocessor = None, stop_words = stopwords.words('english'), max_features = 10000)
+Training_bag_of_words_features = []
+Testing_bag_of_words_features = []
+
 def cleanup(string):
 	if string == None:
 		return ""
@@ -118,18 +122,24 @@ def add_sentiment_scores(lines_in_file, headers):
 		line.insert(15, scores['neu'])
 
 def generate_bag_of_word_features(post_texts):
-	vectorizer = CountVectorizer(analyzer = "word", tokenizer = nltk.word_tokenize, preprocessor = None, stop_words = stopwords.words('english'), max_features = 10000)
 	return vectorizer.fit_transform(post_texts).toarray()
 
+def generate_test_bag_of_word_features(post_texts):
+	return vectorizer.transform(post_texts).toarray()
 
-def train_random_forest_classifier(training_data, n_est=100):
+def train_random_forest_classifier(training_data, n_est=100, use_bag_of_words = False):
+	global Training_bag_of_words_features
+	vectorizer = CountVectorizer(analyzer = "word", tokenizer = nltk.word_tokenize, preprocessor = None, stop_words = stopwords.words('english'), max_features = 10000)
 	forest = RandomForestClassifier(n_estimators=n_est)
-
-	forest = forest.fit(training_data[:, 1:15].astype('float'), training_data[:, -1].astype('float'))
 	forest.classes_ = [0, 1]
-	# forest.fit_transform(generate_bag_of_word_features(training_data[:, -2]), training_data[:, -1].astype('float'))	
-	# scores = cross_val_score(forest, generate_bag_of_word_features(training_data[:, -2]), training_data[:, -1].astype('float'), cv = 5)
-	scores = cross_val_score(forest, training_data[:, 1:15].astype('float'), training_data[:, -1].astype('float'), cv = 5)
+	if use_bag_of_words:
+		if Training_bag_of_words_features == []:
+			Training_bag_of_words_features = generate_bag_of_word_features(training_data[:, -2])
+		forest = forest.fit(Training_bag_of_words_features, training_data[:, -1].astype('float'))
+		scores = cross_val_score(forest, Training_bag_of_words_features, training_data[:, -1].astype('float'), cv = 5)
+	else:
+		forest = forest.fit(training_data[:, 1:15].astype('float'), training_data[:, -1].astype('float'))
+		scores = cross_val_score(forest, training_data[:, 1:15].astype('float'), training_data[:, -1].astype('float'), cv = 5)
 	print("Scores gotten using Decision Tree (# of estimators="+str(n_est)+")")
 	print(scores)
 	print(np.mean(scores))
@@ -187,10 +197,16 @@ def train_gaussian_NB(training_data):
 	return gnb
 
 
-def generate_submission_file(classifier, submission_filename):
+def generate_submission_file(classifier, submission_filename, use_bag_of_words = False):
+	global Testing_bag_of_words_features
 	(test_data, _) = read_lines_from_file('data/test_feature_file.csv')
 	test_data = np.array(test_data)
-	output_probabs=classifier.predict_proba(test_data[:, 1:15].astype('float'))
+	if use_bag_of_words:
+		if Testing_bag_of_words_features == []:
+			Testing_bag_of_words_features = generate_test_bag_of_word_features(test_data[:, -2])
+		output_probabs=classifier.predict_proba(Testing_bag_of_words_features)
+	else:
+		output_probabs=classifier.predict_proba(test_data[:, 1:15].astype('float'))
 	output_file = open(submission_filename, 'w')
 	print("request_id,requester_received_pizza", file = output_file)
 	for ind, record in enumerate(test_data):
