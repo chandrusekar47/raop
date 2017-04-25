@@ -122,44 +122,49 @@ def generate_bag_of_word_features(post_texts):
 	return vectorizer.fit_transform(post_texts).toarray()
 
 
-def train_random_forest_classifier(training_data):
-	forest = RandomForestClassifier(n_estimators = 50)
+def train_random_forest_classifier(training_data, n_est=100):
+	forest = RandomForestClassifier(n_estimators=n_est)
 
 	forest = forest.fit(training_data[:, 1:15].astype('float'), training_data[:, -1].astype('float'))
 	forest.classes_ = [0, 1]
 	# forest.fit_transform(generate_bag_of_word_features(training_data[:, -2]), training_data[:, -1].astype('float'))	
 	# scores = cross_val_score(forest, generate_bag_of_word_features(training_data[:, -2]), training_data[:, -1].astype('float'), cv = 5)
 	scores = cross_val_score(forest, training_data[:, 1:15].astype('float'), training_data[:, -1].astype('float'), cv = 5)
+	print("Scores gotten using Decision Tree (# of estimators="+str(n_est)+")")
 	print(scores)
 	print(np.mean(scores))
-	return forest
+	return forest, np.mean(scores)
 
-def train_Decision_tree_classifer(training_data):
-	dtree = DecisionTreeClassifier(max_depth=50, min_samples_split=2,random_state=0)
+def train_decision_tree_classifer(training_data, depth=50):
+	dtree = DecisionTreeClassifier(max_depth=depth, min_samples_split=2,random_state=0)
 	scores = cross_val_score(dtree, training_data[:, 1:15].astype('float'), training_data[:, -1].astype('float'), cv = 5)
-	print("Scores got using Decision Tree"+str(scores))
+	print("Scores gotten using Decision Tree (max depth="+str(depth)+")")
+	print(scores)
 	print(np.mean(scores))
-	return dtree
+	return dtree, np.mean(scores)
 
-def train_extra_Randomized_forest_classifer(training_data):
-	randomized = ExtraTreesClassifier(n_estimators=10, max_depth=None, min_samples_split=2, random_state=0)
+def train_extra_Randomized_forest_classifer(training_data, n_est=10):
+	randomized = ExtraTreesClassifier(n_estimators=n_est, max_depth=None, min_samples_split=2, random_state=0)
 	scores = cross_val_score(randomized, training_data[:, 1:15].astype('float'), training_data[:, -1].astype('float'), cv = 10)
-	print("Scores got using Extra Randomized Forests"+str(scores))
+	print("Scores gotten using Extra Randomized Forests (# of estimators="+str(n_est)+")")
+	print(scores)
 	print(np.mean(scores))
-	return randomized
+	return randomized, np.mean(scores)
 
-def train_AdaBoostClassifier(training_data):
-	adaboost = AdaBoostClassifier(n_estimators=100)
+def train_AdaBoost_classifier(training_data, n_est):
+	adaboost = AdaBoostClassifier(n_estimators=n_est)
 	scores = cross_val_score(adaboost, training_data[:, 1:15].astype('float'), training_data[:, -1].astype('float'), cv = 10)
 	adaboost = adaboost.fit(training_data[:, 1:15].astype('float'), training_data[:, -1].astype('float'))
-	print("Scores got using AdaBoost classifier "+str(scores))
+	print("Scores gotten using AdaBoost classifier (# of estimators="+str(n_est)+")")
+	print(scores)
 	print(np.mean(scores))
-	return adaboost
+	return adaboost, np.mean(scores)
 
 def train_ensemble_classifier(training_data,forest, dtree, adaboost, extra_random, gnb, regression):
 	ensemble = VotingClassifier(estimators=[('rf', forest), ('dt', dtree), ('ab', adaboost),('et',extra_random),('gnb',gnb),('lr',regression)], voting='hard')
 	scores = cross_val_score(ensemble, training_data[:, 1:15].astype('float'), training_data[:, -1].astype('float'), cv = 5)
-	print("Scores got using Ensemble classifier : "+str(scores))
+	print("Scores gotten using Ensemble classifier")
+	print(str(scores))
 	print(np.mean(scores))
 	return adaboost
 
@@ -234,13 +239,38 @@ if __name__ == '__main__':
 	(training_data, _) = read_lines_from_file('data/filtered_features.csv')
 	training_data = np.array(training_data)
 
+	rf_est = [50, 75, 100, 125, 150]
+	dt_depth = [10, 20, 30, 40, 50]
+	erf_est = [5, 10, 15, 20, 25]
+	ada_est = [50, 75, 100, 125, 150]
+
 	gnb = train_gaussian_NB(training_data)
 	regression = train_Logistic_regression(training_data)
-	forest = train_random_forest_classifier(training_data)
-	dtree = train_Decision_tree_classifer(training_data)
-	extra_random = train_extra_Randomized_forest_classifer(training_data)
-	adaboost = train_AdaBoostClassifier(training_data)
 
-	classifier = train_ensemble_classifier(training_data,forest, dtree, adaboost, extra_random, gnb, regression)
+	rf_results = []
+	for e in rf_est:
+		forest, rf_score = train_random_forest_classifier(training_data, e)
+		rf_results.append(rf_score)
+	rf_optimal, _ = train_random_forest_classifier(training_data, rf_est[rf_results.index(max(rf_results))])
+
+	dt_results = []
+	for d in dt_depth:
+		dtree, dt_score = train_decision_tree_classifer(training_data, d)
+		dt_results.append(dt_score)
+	dt_optimal, _ = train_decision_tree_classifer(training_data, dt_depth[dt_results.index(max(dt_results))])
+
+	erf_results = []
+	for e in erf_est:
+		extra_random, erf_score = train_extra_Randomized_forest_classifer(training_data, e)
+		erf_results.append(erf_score)
+	erf_optimal, _ = train_extra_Randomized_forest_classifer(training_data, erf_est[erf_results.index(max(erf_results))])
+
+	ada_results = []
+	for a in ada_est:
+		adaboost, ada_score = train_AdaBoost_classifier(training_data, a)
+		ada_results.append(ada_score)
+	ada_optimal, _ = train_AdaBoost_classifier(training_data, ada_est[ada_results.index(max(ada_results))])
+
+	classifier = train_ensemble_classifier(training_data, rf_optimal, dt_optimal, ada_optimal, erf_optimal, gnb, regression)
 
 	generate_submission_file(classifier, "numeric-features-prediction.csv")
