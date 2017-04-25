@@ -18,12 +18,11 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import GaussianNB
 from sklearn.ensemble import VotingClassifier
 
-
-
-
+sentiment_analyzer = SentimentIntensityAnalyzer()
 vectorizer = CountVectorizer(analyzer = "word", tokenizer = nltk.word_tokenize, preprocessor = None, stop_words = stopwords.words('english'), max_features = 10000)
 Training_bag_of_words_features = []
 Testing_bag_of_words_features = []
+selected_features = range(1, 23)
 
 def cleanup(string):
 	if string == None:
@@ -41,6 +40,22 @@ def month_of_year(unix_timestamp):
 
 def day_of_year(unix_timestamp):
 	return int(datetime.datetime.fromtimestamp(int(unix_timestamp)).strftime('%j'))
+
+def num_words(text):
+	return float(len(text.split(" ")))
+
+def group_words_by_sentiment(text):
+	words = text.split()
+	word_scores = zip(words, map(sentiment_analyzer.polarity_scores, words))
+	pos_words = [x[0] for x in word_scores if x[1]['pos'] >= 0.5]
+	neg_words = [x[0] for x in word_scores if x[1]['neg'] >= 0.5]
+	neutral_words = [x[0] for x in word_scores if x[1]['neu'] >= 0.5]
+	return (pos_words, neg_words, neutral_words)
+
+def get_adjectives(text):
+	text = nltk.word_tokenize(text)
+	return map(lambda x: x[0], filter(lambda x: x[1] == "JJ", nltk.pos_tag(text)))
+
 
 def dict_to_csv(filename, output_file_name):
 	with open(filename) as data_file:
@@ -61,11 +76,19 @@ def dict_to_csv(filename, output_file_name):
 	"pos_score",
 	"neg_score",
 	"neutral_score",
+	"no_words_title",
+	"no_words_posts",
+	"title_length",
+	"post_length",
+	"pos_words_percent",
+	"neg_words_percent",
+	"neutral_words_percent",
+	"post_adj_words_percent",
+	"title_adj_words_percent",
 	"subreddits_posted",
 	"title",
 	"edited_text",
 	"success"]
-	sid = SentimentIntensityAnalyzer()
 	print(','.join(headers), file = output_file)
 	for record in data:
 		values = []
@@ -82,12 +105,24 @@ def dict_to_csv(filename, output_file_name):
 		values.append(float(record["requester_upvotes_plus_downvotes_at_request"]))
 		values.append(float(record["requester_upvotes_minus_downvotes_at_request"]))
 		post_text = cleanup(record["request_text_edit_aware"])
-		scores = sid.polarity_scores(post_text)
+		title = cleanup(record["request_title"])
+		scores = sentiment_analyzer.polarity_scores(post_text)
+		no_words = num_words(post_text)
+		(pos_words, neg_words, neutral_words) = group_words_by_sentiment(post_text)
 		values.append(scores['pos'])
 		values.append(scores['neg'])
 		values.append(scores['neu'])
+		values.append(num_words(title)) 
+		values.append(no_words) 
+		values.append(len(title)) 
+		values.append(len(post_text))
+		values.append(len(pos_words)/no_words if no_words !=0 else 0)
+		values.append(len(neg_words)/no_words if no_words !=0 else 0)
+		values.append(len(neutral_words)/no_words if no_words !=0 else 0)
+		values.append(len(get_adjectives(post_text))/no_words if no_words !=0 else 0)
+		values.append(len(get_adjectives(title))/num_words(title))
 		values.append('"'+array_to_str(record["requester_subreddits_at_request"]) +'"')
-		values.append('"'+cleanup(record["request_title"])+ '"')
+		values.append('"'+title+ '"')
 		values.append('"'+post_text + '"')
 		if record.has_key("requester_received_pizza"):
 			values.append(1 if bool(record["requester_received_pizza"]) else 0)
@@ -104,22 +139,6 @@ def read_lines_from_file(input_file):
 		for line in reader:
 			lines.append(line)
 	return (lines, headers)
-
-def add_sentiment_scores(lines_in_file, headers):
-	text_index = 15
-	headers.insert(13, "pos_score")
-	headers.insert(14, "neg_score")
-	headers.insert(15, "neutral_score")
-	sid = SentimentIntensityAnalyzer()
-	for line in lines_in_file:
-		post_text = line[text_index]
-		line[text_index] = line[text_index].replace("\n", "")
-		line[text_index] = line[text_index].replace("\t", "")
-		line[text_index] = line[text_index].replace("\r", "")
-		scores = sid.polarity_scores(post_text)
-		line.insert(13, scores['pos'])
-		line.insert(14, scores['neg'])
-		line.insert(15, scores['neu'])
 
 def generate_bag_of_word_features(post_texts):
 	return vectorizer.fit_transform(post_texts).toarray()
@@ -138,8 +157,8 @@ def train_random_forest_classifier(training_data, n_est=100, use_bag_of_words = 
 		forest = forest.fit(Training_bag_of_words_features, training_data[:, -1].astype('float'))
 		scores = cross_val_score(forest, Training_bag_of_words_features, training_data[:, -1].astype('float'), cv = 5)
 	else:
-		forest = forest.fit(training_data[:, 1:15].astype('float'), training_data[:, -1].astype('float'))
-		scores = cross_val_score(forest, training_data[:, 1:15].astype('float'), training_data[:, -1].astype('float'), cv = 5)
+		forest = forest.fit(training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'))
+		scores = cross_val_score(forest, training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'), cv = 5)
 	print("Scores gotten using Decision Tree (# of estimators="+str(n_est)+")")
 	print(scores)
 	print(np.mean(scores))
@@ -147,7 +166,7 @@ def train_random_forest_classifier(training_data, n_est=100, use_bag_of_words = 
 
 def train_decision_tree_classifer(training_data, depth=50):
 	dtree = DecisionTreeClassifier(max_depth=depth, min_samples_split=2,random_state=0)
-	scores = cross_val_score(dtree, training_data[:, 1:15].astype('float'), training_data[:, -1].astype('float'), cv = 5)
+	scores = cross_val_score(dtree, training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'), cv = 5)
 	print("Scores gotten using Decision Tree (max depth="+str(depth)+")")
 	print(scores)
 	print(np.mean(scores))
@@ -155,7 +174,7 @@ def train_decision_tree_classifer(training_data, depth=50):
 
 def train_extra_Randomized_forest_classifer(training_data, n_est=10):
 	randomized = ExtraTreesClassifier(n_estimators=n_est, max_depth=None, min_samples_split=2, random_state=0)
-	scores = cross_val_score(randomized, training_data[:, 1:15].astype('float'), training_data[:, -1].astype('float'), cv = 10)
+	scores = cross_val_score(randomized, training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'), cv = 10)
 	print("Scores gotten using Extra Randomized Forests (# of estimators="+str(n_est)+")")
 	print(scores)
 	print(np.mean(scores))
@@ -163,8 +182,8 @@ def train_extra_Randomized_forest_classifer(training_data, n_est=10):
 
 def train_AdaBoost_classifier(training_data, n_est):
 	adaboost = AdaBoostClassifier(n_estimators=n_est)
-	scores = cross_val_score(adaboost, training_data[:, 1:15].astype('float'), training_data[:, -1].astype('float'), cv = 10)
-	adaboost = adaboost.fit(training_data[:, 1:15].astype('float'), training_data[:, -1].astype('float'))
+	scores = cross_val_score(adaboost, training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'), cv = 10)
+	adaboost = adaboost.fit(training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'))
 	print("Scores gotten using AdaBoost classifier (# of estimators="+str(n_est)+")")
 	print(scores)
 	print(np.mean(scores))
@@ -172,14 +191,14 @@ def train_AdaBoost_classifier(training_data, n_est):
 
 def train_ensemble_classifier(training_data,forest, dtree, adaboost, extra_random, gnb, regression):
 	ensemble = VotingClassifier(estimators=[('rf', forest), ('dt', dtree), ('ab', adaboost),('et',extra_random),('gnb',gnb),('lr',regression)], voting='hard')
-	scores = cross_val_score(ensemble, training_data[:, 1:15].astype('float'), training_data[:, -1].astype('float'), cv = 5)
+	scores = cross_val_score(ensemble, training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'), cv = 5)
 	print("Scores gotten using Ensemble classifier")
 	print(str(scores))
 	print(np.mean(scores))
 	return adaboost
 
 def train_Logistic_regression(training_data):
-	x = (training_data[:, 1:15].astype('float'))
+	x = (training_data[:, selected_features].astype('float'))
 	y = (training_data[:, -1].astype('float'))
 
 	clf1 = LogisticRegression(random_state=1)
@@ -188,7 +207,7 @@ def train_Logistic_regression(training_data):
 	return clf1
 
 def train_gaussian_NB(training_data):
-	x = (training_data[:, 1:15].astype('float'))
+	x = (training_data[:, selected_features].astype('float'))
 	y = (training_data[:, -1].astype('float'))
 
 	gnb = GaussianNB()
@@ -206,7 +225,7 @@ def generate_submission_file(classifier, submission_filename, use_bag_of_words =
 			Testing_bag_of_words_features = generate_test_bag_of_word_features(test_data[:, -2])
 		output_probabs=classifier.predict_proba(Testing_bag_of_words_features)
 	else:
-		output_probabs=classifier.predict_proba(test_data[:, 1:15].astype('float'))
+		output_probabs=classifier.predict_proba(test_data[:, selected_features].astype('float'))
 	output_file = open(submission_filename, 'w')
 	print("request_id,requester_received_pizza", file = output_file)
 	for ind, record in enumerate(test_data):
@@ -224,7 +243,7 @@ def voting_classifier():
 	clf1 = LogisticRegression(random_state=1)
 	clf2 = RandomForestClassifier(random_state=1)
 	clf3 = GaussianNB()
-	X = (training_data[:, 1:15].astype('float'))
+	X = (training_data[:, selected_features].astype('float'))
 	y = (training_data[:, -1].astype('float'))
 	eclf1 = VotingClassifier(estimators=[
 	        ('lr', clf1), ('rf', clf2), ('gnb', clf3)], voting='hard')
@@ -241,17 +260,15 @@ def voting_classifier():
 	       ('lr', clf1), ('rf', clf2), ('gnb', clf3)],
 	       voting='soft', weights=[2,1,1])
 	eclf3 = eclf3.fit(X, y)
-	#print(eclf3.predict_proba(test_data[:, 1:15].astype('float')))
-	scores = cross_val_score(eclf3, training_data[:, 1:15].astype('float'), training_data[:, -1].astype('float'), cv = 5)
+	#print(eclf3.predict_proba(test_data[:, selected_features].astype('float')))
+	scores = cross_val_score(eclf3, training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'), cv = 5)
 	print(scores)
 	print(np.mean(scores))
 	return eclf3
 
 
 if __name__ == '__main__':
-	generate_feature_files()
-	# classifier=voting_classifier()
-	#classifier = train_random_forest_classifier()
+	# generate_feature_files()
 	(training_data, _) = read_lines_from_file('data/filtered_features.csv')
 	training_data = np.array(training_data)
 
