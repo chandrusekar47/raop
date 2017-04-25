@@ -104,7 +104,7 @@ def get_narrative(text):
 		for t in range(len(narratives)):
 			if w in triggers[t]:
 				counts[t] += 1
-	return narratives[counts.index(max(counts))]
+	return counts.index(max(counts))
 
 def dict_to_csv(filename, output_file_name):
 	with open(filename) as data_file:
@@ -145,7 +145,7 @@ def dict_to_csv(filename, output_file_name):
 		values.append('"'+array_to_str(record["requester_subreddits_at_request"]) +'"')
 		values.append('"'+title+ '"')
 		values.append('"'+post_text + '"')
-		values.append('"' + get_narrative(title + ' ' + post_text) + '"')
+		values.append('"' + str(get_narrative(title + ' ' + post_text)) + '"')
 		if record.has_key("requester_received_pizza"):
 			values.append(1 if bool(record["requester_received_pizza"]) else 0)
 		else:
@@ -308,8 +308,8 @@ def voting_classifier():
 
 
 if __name__ == '__main__':
-	generate_feature_files()
-	print("YOLO done generating features")
+	#generate_feature_files()
+	#print("YOLO done generating features")
 	(training_data, _) = read_lines_from_file('data/filtered_features.csv')
 	training_data = np.array(training_data)
 
@@ -336,7 +336,7 @@ if __name__ == '__main__':
 		forest, rf_score = train_random_forest_classifier(training_data, e)
 		rf_results.append(rf_score)
 	rf_optimal, _ = train_random_forest_classifier(training_data, rf_est[rf_results.index(max(rf_results))])
-
+	
 	dt_results = []
 	for d in dt_depth:
 		dtree, dt_score = train_decision_tree_classifer(training_data, d)
@@ -360,8 +360,11 @@ if __name__ == '__main__':
 
 	filename = "ensemble-prediction.csv"
 	generate_submission_file(ensemble_classifier, filename)
-
+	
 	filename = "randomized-forest-prediction.csv"
 	generate_submission_file(rf_optimal, filename)
+
+	filename = "adaboost-prediction.csv"
+	generate_submission_file(ada_optimal, filename)	
 
 	print('Done!')
