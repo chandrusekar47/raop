@@ -68,17 +68,18 @@ def read_custom():
   for d in data:
     text = d[idx].lower()
     voc += re.split(r"[\W']+", text)
+  print(voc)
   return voc
 
 
-vocabulary = read_data(filename)
-#vocabulary = read_custom() ####################################### CHANGE HERE
+#vocabulary = read_data(filename)
+vocabulary = read_custom() ####################################### CHANGE HERE
 
 print('Data size', len(vocabulary))
 
 # Step 2: Build the dictionary and replace rare words with UNK token.
-vocabulary_size = 50000
-#vocabulary_size = 12000 ########################################## CHANGE HERE
+#vocabulary_size = 50000
+vocabulary_size = 12000 ########################################## CHANGE HERE
 def build_dataset(words, n_words):
   """Process raw inputs into a dataset."""
   count = [['UNK', -1]]
@@ -255,8 +256,8 @@ def plot_with_labels(low_dim_embs, labels, filename='tsne.png'):
 
   plt.savefig(filename)
 
-csv_file = 'data/sample_embeddings.csv'
-#csv_file = 'data/raop_embeddings.csv' ############################ CHANGE HERE
+#csv_file = 'data/sample_embeddings.csv'
+csv_file = 'data/raop_embeddings.csv' ############################ CHANGE HERE
 embed = final_embeddings.tolist()
 csv_data = [[reverse_dictionary[i]] + embed[i] for i in xrange(len(embed))]
 with open(csv_file, 'w') as f:
