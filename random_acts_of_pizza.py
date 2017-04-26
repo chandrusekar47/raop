@@ -26,7 +26,48 @@ sentiment_analyzer = SentimentIntensityAnalyzer()
 vectorizer = CountVectorizer(ngram_range =(3,3) , analyzer = "word", tokenizer = nltk.word_tokenize, preprocessor = None, stop_words = stopwords.words('english'), max_features = 10000)
 Training_bag_of_words_features = []
 Testing_bag_of_words_features = []
-selected_features = [1,2,4,6,7,8,14,16,17,18]
+selected_features = [1,2,4,6,7,8,14,16,17,18,27]
+headers = ["request_id",
+	"acct_age_in_days",
+	"days_since_first_post_on_raop",
+	"acct_no_of_comments",
+	"acct_no_of_comments_in_raop",
+	"acct_no_of_posts",
+	"acct_no_of_posts_in_raop",
+	"no_of_subreddits_posted",
+	"request_month",
+	"request_day_of_year",
+	"no_of_votes",
+	"post_karma",
+	"pos_score",
+	"neg_score",
+	"neutral_score",
+	"no_words_title",
+	"no_words_posts",
+	"title_length",
+	"post_length",
+	"pos_words_percent",
+	"neg_words_percent",
+	"neutral_words_percent",
+	"post_adj_words_percent",
+	"title_adj_words_percent",
+	"subreddits_posted",
+	"title",
+	"edited_text",
+	"narrative",
+	"success"]
+selected_features = map(headers.index, ["days_since_first_post_on_raop","no_words_posts","post_length","acct_no_of_comments_in_raop","acct_no_of_posts_in_raop", "pos_score", "neg_score", "request_month", "pos_words_percent", "neg_words_percent", "request_day_of_year"])
+# todo: change this have the name of the feature like the previous line
+selected_features = [1,2,4,6,7,8,14,16,17,18,27]
+
+narratives = ['money', 'job', 'student', 'family', 'craving']
+triggers = [
+	['money', 'now', 'broke', 'week', 'until', 'time', 'last', 'day', 'when', 'today', 'tonight', 'paid', 'next', 'first', 'night', 'after', 'tomorrow', 'month', 'while', 'account', 'before', 'long', 'Friday', 'rent', 'buy', 'bank', 'still', 'bills', 'bills', 'ago', 'cash', 'due', 'due', 'soon', 'past', 'never', 'paycheck', 'check', 'spent', 'years', 'poor', 'till', 'yesterday', 'morning', 'dollars', 'financial', 'hour', 'bill', 'evening', 'credit', 'budget', 'loan', 'bucks', 'deposit', 'dollar', 'current', 'payed'],
+	['work', 'job', 'paycheck', 'unemployment', 'interview', 'fired', 'employment', 'hired', 'hire'],
+	['college', 'student', 'school', 'roommate', 'studying', 'university', 'finals', 'semester', 'class', 'study', 'project', 'dorm', 'tuition'],
+	['family', 'mom', 'wife', 'parents', 'mother', 'husband', 'dad', 'son', 'daughter', 'father', 'parent', 'mum'],
+	['friend', 'girlfriend', 'craving', 'birthday', 'boyfriend', 'celebrate', 'party', 'game', 'games', 'movie', 'date', 'drunk', 'beer', 'celebrating', 'invited', 'drinks', 'crave', 'wasted', 'invite']
+]
 
 def cleanup(string):
 	if string == None:
@@ -60,39 +101,18 @@ def get_adjectives(text):
 	text = nltk.word_tokenize(text)
 	return map(lambda x: x[0], filter(lambda x: x[1] == "JJ", nltk.pos_tag(text)))
 
+def get_narrative(text):
+	counts = [0, 0, 0, 0, 0]
+	for w in text.split(' '):
+		for t in range(len(narratives)):
+			if w in triggers[t]:
+				counts[t] += 1
+	return counts.index(max(counts))
 
 def dict_to_csv(filename, output_file_name):
 	with open(filename) as data_file:
 		data = json.load(data_file)	
 	output_file = open(output_file_name, 'w')
-	headers = ["request_id",
-	"acct_age_in_days",
-	"days_since_first_post_on_raop",
-	"acct_no_of_comments",
-	"acct_no_of_comments_in_raop",
-	"acct_no_of_posts",
-	"acct_no_of_posts_in_raop",
-	"no_of_subreddits_posted",
-	"request_month",
-	"request_day_of_year",
-	"no_of_votes",
-	"post_karma",
-	"pos_score",
-	"neg_score",
-	"neutral_score",
-	"no_words_title",
-	"no_words_posts",
-	"title_length",
-	"post_length",
-	"pos_words_percent",
-	"neg_words_percent",
-	"neutral_words_percent",
-	"post_adj_words_percent",
-	"title_adj_words_percent",
-	"subreddits_posted",
-	"title",
-	"edited_text",
-	"success"]
 	print(','.join(headers), file = output_file)
 	for record in data:
 		values = []
@@ -116,9 +136,9 @@ def dict_to_csv(filename, output_file_name):
 		values.append(scores['pos'])
 		values.append(scores['neg'])
 		values.append(scores['neu'])
-		values.append(num_words(title)) 
-		values.append(no_words) 
-		values.append(len(title)) 
+		values.append(num_words(title))
+		values.append(no_words)
+		values.append(len(title))
 		values.append(len(post_text))
 		values.append(len(pos_words)/no_words if no_words !=0 else 0)
 		values.append(len(neg_words)/no_words if no_words !=0 else 0)
@@ -128,6 +148,7 @@ def dict_to_csv(filename, output_file_name):
 		values.append('"'+array_to_str(record["requester_subreddits_at_request"]) +'"')
 		values.append('"'+title+ '"')
 		values.append('"'+post_text + '"')
+		values.append('"' + str(get_narrative(title + ' ' + post_text)) + '"')
 		if record.has_key("requester_received_pizza"):
 			values.append(1 if bool(record["requester_received_pizza"]) else 0)
 		else:
@@ -153,7 +174,7 @@ def generate_test_bag_of_word_features(post_texts):
 def train_random_forest_classifier(training_data, n_est=100, use_bag_of_words = True):
 	global Training_bag_of_words_features
 	vectorizer = CountVectorizer(analyzer = "word", tokenizer = nltk.word_tokenize, preprocessor = None, stop_words = stopwords.words('english'), max_features = 10000)
-	forest = RandomForestClassifier(n_estimators=n_est)
+	forest = RandomForestClassifier(n_estimators=n_est, class_weight = "balanced")
 	forest.classes_ = [0, 1]
 	if use_bag_of_words:
 		if Training_bag_of_words_features == []:
@@ -169,7 +190,8 @@ def train_random_forest_classifier(training_data, n_est=100, use_bag_of_words = 
 	return forest, np.mean(scores)
 
 def train_decision_tree_classifer(training_data, depth=50):
-	dtree = DecisionTreeClassifier(max_depth=depth, min_samples_split=2,random_state=0)
+	dtree = DecisionTreeClassifier(max_depth=depth, min_samples_split=2,class_weight = "balanced")
+	dtree.classes_ = [0, 1]
 	scores = cross_val_score(dtree, training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'), cv = 5)
 	print("Scores gotten using Decision Tree (max depth="+str(depth)+")")
 	print(scores)
@@ -177,7 +199,8 @@ def train_decision_tree_classifer(training_data, depth=50):
 	return dtree, np.mean(scores)
 
 def train_extra_Randomized_forest_classifer(training_data, n_est=10):
-	randomized = ExtraTreesClassifier(n_estimators=n_est, max_depth=None, min_samples_split=2, random_state=0)
+	randomized = ExtraTreesClassifier(n_estimators=n_est, max_depth=None, min_samples_split=2, class_weight = "balanced")
+	randomized.classes_ = [0, 1]
 	scores = cross_val_score(randomized, training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'), cv = 10)
 	print("Scores gotten using Extra Randomized Forests (# of estimators="+str(n_est)+")")
 	print(scores)
@@ -186,6 +209,7 @@ def train_extra_Randomized_forest_classifer(training_data, n_est=10):
 
 def train_AdaBoost_classifier(training_data, n_est):
 	adaboost = AdaBoostClassifier(n_estimators=n_est)
+	adaboost.classes_ = [0, 1]
 	scores = cross_val_score(adaboost, training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'), cv = 10)
 	adaboost = adaboost.fit(training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'))
 	print("Scores gotten using AdaBoost classifier (# of estimators="+str(n_est)+")")
@@ -194,7 +218,8 @@ def train_AdaBoost_classifier(training_data, n_est):
 	return adaboost, np.mean(scores)
 
 def train_ensemble_classifier(training_data,forest, dtree, adaboost, extra_random, gnb, regression):
-	ensemble = VotingClassifier(estimators=[('rf', forest), ('dt', dtree), ('ab', adaboost),('et',extra_random),('gnb',gnb),('lr',regression)], voting='hard')
+	ensemble = VotingClassifier(estimators=[('rf', forest), ('dt', dtree), ('et',extra_random),('gnb',gnb),('lr',regression)], voting='hard')
+	ensemble.classes_ = [0, 1]
 	scores = cross_val_score(ensemble, training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'), cv = 5)
 	print("Scores gotten using Ensemble classifier")
 	print(str(scores))
@@ -205,7 +230,7 @@ def train_Logistic_regression(training_data):
 	x = (training_data[:, selected_features].astype('float'))
 	y = (training_data[:, -1].astype('float'))
 
-	clf1 = LogisticRegression(penalty = 'l1',random_state=1,class_weight='balanced')
+	clf1 = LogisticRegression(penalty = 'l1', class_weight='balanced')
 	clf1 = clf1.fit(x,y)
 
 	print("LOG REGRESSION COEFF : "+str(clf1.coef_) )#acess coefficients
@@ -230,7 +255,8 @@ def generate_submission_file(classifier, submission_filename, use_bag_of_words =
 			Testing_bag_of_words_features = generate_test_bag_of_word_features(test_data[:, -2])
 		output_probabs=classifier.predict_proba(Testing_bag_of_words_features)
 	else:
-		output_probabs=classifier.predict_proba(test_data[:, selected_features].astype('float'))
+		output_probabs=classifier.predict_proba(test_data[:, selected_features])
+	print(np.any(np.array(output_probabs) > 0))
 	output_file = open(submission_filename, 'w')
 	print("request_id,requester_received_pizza", file = output_file)
 	for ind, record in enumerate(test_data):
@@ -284,7 +310,7 @@ def voting_classifier():
 	return eclf3
 
 def generate_gaussian_mixture_models(training_data,test_data,submission_filename):
-	training_data = generate_normalized_data(training_data)
+	#training_data = generate_normalized_data(training_data)
 	headers = ["request_id",
 	"acct_age_in_days",
 	"days_since_first_post_on_raop",
@@ -365,7 +391,7 @@ def generate_gaussian_mixture_models(training_data,test_data,submission_filename
 
 
 if __name__ == '__main__':
-	#generate_feature_files()
+	generate_feature_files()
 	print("YOLO done generating features")
 	(training_data, _) = read_lines_from_file('data/filtered_features.csv')
 	(test_data, _) = read_lines_from_file('data/test_feature_file.csv')
@@ -374,11 +400,10 @@ if __name__ == '__main__':
 
 	generate_gaussian_mixture_models(training_data,test_data,"EM_numeric-features-prediction.csv")
 
-	
 	#training_data = generate_normalized_data(training_data)
 	#print("Normalization done")
 	#print(training_data[0])
-	"""
+	
 	regression = train_Logistic_regression(training_data)
 
 	print(regression.get_params())
@@ -387,11 +412,13 @@ if __name__ == '__main__':
 	dt_depth = [10, 20, 30, 40, 50]
 	erf_est = [5, 10, 15, 20, 25]
 	ada_est = [50, 75, 100, 125, 150]
+
 	gnb = train_gaussian_NB(training_data)
 	regression = train_Logistic_regression(training_data)
 
-	print(regression.get_params())	
-	
+	print(regression.get_params())
+
+
 	rf_results = []
 	for e in rf_est:
 		forest, rf_score = train_random_forest_classifier(training_data, e)
@@ -416,9 +443,23 @@ if __name__ == '__main__':
 		ada_results.append(ada_score)
 	ada_optimal, _ = train_AdaBoost_classifier(training_data, ada_est[ada_results.index(max(ada_results))])
 
-	classifier = train_ensemble_classifier(training_data, rf_optimal, dt_optimal, ada_optimal, erf_optimal, gnb, regression)
-	"""
-	"""
+
+	#classifier = train_ensemble_classifier(training_data, rf_optimal, dt_optimal, ada_optimal, erf_optimal, gnb, regression)
+
+
 	rf_optimal,_ = train_random_forest_classifier(training_data)
 	generate_submission_file(rf_optimal, "numeric-features-prediction.csv")
-	"""
+
+	ensemble_classifier = train_ensemble_classifier(training_data, rf_optimal, dt_optimal, ada_optimal, erf_optimal, gnb, regression)
+
+	filename = "ensemble-prediction.csv"
+	generate_submission_file(ensemble_classifier, filename)
+	
+	filename = "randomized-forest-prediction.csv"
+	generate_submission_file(rf_optimal, filename)
+
+	filename = "adaboost-prediction.csv"
+	generate_submission_file(ada_optimal, filename)	
+	
+	print('Done!')
+

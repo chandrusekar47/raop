@@ -35,6 +35,7 @@ def plot(vecs, filename='raop.png'):
 
 
 data, labels = read_with_labels('data/filtered_features_1.csv')
+data = data[250:6101]
 embeddings = read_embeddings('data/raop_embeddings.csv')
 
 vecLen = len(embeddings['UNK'])
@@ -66,7 +67,7 @@ for d in data:
 	vectors.append([postId, success, titleVec, reqVec])
 
 tsne = TSNE(perplexity=30, n_components=2, init='pca', n_iter=5000)
-plotOnly = 500
+plotOnly = len(vectors)
 ids = [v[0] for v in vectors[:plotOnly]]
 successes = [v[1] for v in vectors[:plotOnly]]
 lowDimReqVecs = tsne.fit_transform(np.array([v[3] for v in vectors])[:plotOnly, :])
