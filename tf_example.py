@@ -61,13 +61,16 @@ def read_data(filename):
 
 def read_custom():
   voc = []
-  with open('data/comments_cleaned2.csv', 'r') as f:
+  with open('data/filtered_features.csv', 'r') as f:
     data = list(csv.reader(f))
   labels = data.pop(0)
-  idx = labels.index('request_text')
+  text_idx = labels.index('edited_text')
+  title_idx = labels.index('title')
   for d in data:
-    text = d[idx].lower()
+    text = d[text_idx].lower()
+    title = d[title_idx].lower()
     voc += re.split(r"[\W']+", text)
+    voc += re.split(r"[\W']+", title)
   print(voc)
   return voc
 
