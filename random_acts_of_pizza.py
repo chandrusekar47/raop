@@ -5,6 +5,7 @@ import csv
 import numpy as np
 import nltk
 import datetime
+import pandas as pd
 from nltk.corpus import stopwords
 from sklearn.feature_extraction.text import CountVectorizer
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
@@ -17,10 +18,12 @@ from sklearn.model_selection import cross_val_score
 from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import GaussianNB
 from sklearn.ensemble import VotingClassifier
+from sklearn.mixture import GaussianMixture
+from collections import Counter
 import sklearn.preprocessing
 
 sentiment_analyzer = SentimentIntensityAnalyzer()
-vectorizer = CountVectorizer(analyzer = "word", tokenizer = nltk.word_tokenize, preprocessor = None, stop_words = stopwords.words('english'), max_features = 10000)
+vectorizer = CountVectorizer(ngram_range =(3,3) , analyzer = "word", tokenizer = nltk.word_tokenize, preprocessor = None, stop_words = stopwords.words('english'), max_features = 10000)
 Training_bag_of_words_features = []
 Testing_bag_of_words_features = []
 selected_features = [1,2,4,6,7,8,14,16,17,18]
@@ -147,7 +150,7 @@ def generate_bag_of_word_features(post_texts):
 def generate_test_bag_of_word_features(post_texts):
 	return vectorizer.transform(post_texts).toarray()
 
-def train_random_forest_classifier(training_data, n_est=100, use_bag_of_words = False):
+def train_random_forest_classifier(training_data, n_est=100, use_bag_of_words = True):
 	global Training_bag_of_words_features
 	vectorizer = CountVectorizer(analyzer = "word", tokenizer = nltk.word_tokenize, preprocessor = None, stop_words = stopwords.words('english'), max_features = 10000)
 	forest = RandomForestClassifier(n_estimators=n_est)
@@ -218,7 +221,7 @@ def train_gaussian_NB(training_data):
 	return gnb
 
 
-def generate_submission_file(classifier, submission_filename, use_bag_of_words = False):
+def generate_submission_file(classifier, submission_filename, use_bag_of_words = True):
 	global Testing_bag_of_words_features
 	(test_data, _) = read_lines_from_file('data/test_feature_file.csv')
 	test_data = np.array(test_data)
@@ -280,17 +283,102 @@ def voting_classifier():
 	print(np.mean(scores))
 	return eclf3
 
+def generate_gaussian_mixture_models(training_data,test_data,submission_filename):
+	training_data = generate_normalized_data(training_data)
+	headers = ["request_id",
+	"acct_age_in_days",
+	"days_since_first_post_on_raop",
+	"acct_no_of_comments",
+	"acct_no_of_comments_in_raop",
+	"acct_no_of_posts",
+	"acct_no_of_posts_in_raop",
+	"no_of_subreddits_posted",
+	"request_month",
+	"request_day_of_year",
+	"no_of_votes",
+	"post_karma",
+	"pos_score",
+	"neg_score",
+	"neutral_score",
+	"no_words_title",
+	"no_words_posts",
+	"title_length",
+	"post_length",
+	"pos_words_percent",
+	"neg_words_percent",
+	"neutral_words_percent",
+	"post_adj_words_percent",
+	"title_adj_words_percent",
+	"subreddits_posted",
+	"title",
+	"edited_text",
+	"success"]
+
+	x = (training_data[:, selected_features].astype('float'))
+	y = (training_data[:, -1].astype('float'))
+
+	k = 2 #number of clusters/gaussian mixture models
+	gmm = GaussianMixture(n_components=k, covariance_type='full', tol=0.001, reg_covar=1e-06, max_iter=100, n_init=1, init_params='kmeans', weights_init=None, means_init=None, precisions_init=None, random_state=None, warm_start=False, verbose=0, verbose_interval=10)
+	gmm = gmm.fit(x,y)
+
+	xo = (training_data[:,selected_features].astype('float'))
+	class_prob = gmm.predict_proba(xo)	
+	class_labels = gmm.predict(xo)
+	print("Predicted Class labels distribution "+str(Counter(class_labels))+"\n\n")
+	output_file = open(submission_filename, 'w')
+	y=np.array(y)
+	cluster = []
+	for c in range(0,k):
+		most_likely_class = 99
+		temp = []
+		c_data = []
+		for i in range(0,len(training_data)):
+			if class_labels[i] == c:
+				temp.append(i)
+				features = np.array(selected_features)
+				record = np.array(training_data[i][features]).tolist()
+				c_data.append(record)
+		print("Cluster "+str(c)+" has the following distribution"+str(Counter(y[temp]))+"\n\n")
+		most_likely_class = Counter(y[temp]).most_common(1)[0][0]
+		cluster.append(c_data)
+	
+	cluster1 = np.array(cluster)	
+	for yo in range(0,k):
+		for i in range(0,len(cluster1[yo])):
+			cluster1[yo][i] = np.array(cluster1[yo][i]).astype('float')
+			cluster1[yo][i] = cluster1[yo][i].tolist()
+
+	#find variances of all those selected dimensions in c_data
+	variances = []
+	for c in range(0,k):
+		cluster_v = []
+		for yolo in range(0,len(selected_features)):
+			selected_data = np.array(cluster1[c])
+			v = np.var(selected_data[:,yolo], dtype=np.float64)
+			cluster_v.append(v)
+		variances.append(cluster_v)
+
+	headers = np.array(headers)
+	indices = np.array(selected_features)
+	print("____________ VARIANCE OF EACH DIMENSION __________\n")
+	print(pd.DataFrame.from_items([('Cluster A', variances[0]), ('Cluster B', variances[1])],orient='index', columns=headers[indices]))
+
 
 if __name__ == '__main__':
-	generate_feature_files()
+	#generate_feature_files()
 	print("YOLO done generating features")
 	(training_data, _) = read_lines_from_file('data/filtered_features.csv')
+	(test_data, _) = read_lines_from_file('data/test_feature_file.csv')
+	test_data = np.array(test_data)
 	training_data = np.array(training_data)
 
+	generate_gaussian_mixture_models(training_data,test_data,"EM_numeric-features-prediction.csv")
+
+	
 	#training_data = generate_normalized_data(training_data)
 	#print("Normalization done")
 	#print(training_data[0])
-
+	"""
 	regression = train_Logistic_regression(training_data)
 
 	print(regression.get_params())
@@ -299,18 +387,17 @@ if __name__ == '__main__':
 	dt_depth = [10, 20, 30, 40, 50]
 	erf_est = [5, 10, 15, 20, 25]
 	ada_est = [50, 75, 100, 125, 150]
-	"""
 	gnb = train_gaussian_NB(training_data)
 	regression = train_Logistic_regression(training_data)
 
 	print(regression.get_params())	
-	"""
+	
 	rf_results = []
 	for e in rf_est:
 		forest, rf_score = train_random_forest_classifier(training_data, e)
 		rf_results.append(rf_score)
 	rf_optimal, _ = train_random_forest_classifier(training_data, rf_est[rf_results.index(max(rf_results))])
-	"""
+	
 	dt_results = []
 	for d in dt_depth:
 		dtree, dt_score = train_decision_tree_classifer(training_data, d)
@@ -331,5 +418,7 @@ if __name__ == '__main__':
 
 	classifier = train_ensemble_classifier(training_data, rf_optimal, dt_optimal, ada_optimal, erf_optimal, gnb, regression)
 	"""
+	"""
+	rf_optimal,_ = train_random_forest_classifier(training_data)
 	generate_submission_file(rf_optimal, "numeric-features-prediction.csv")
-	
+	"""
