@@ -72,7 +72,7 @@ headers = ["request_id",
 	"success"]
 selected_features = map(headers.index, ["days_since_first_post_on_raop","no_words_posts","post_length","acct_no_of_comments_in_raop","acct_no_of_posts_in_raop", "pos_score", "neg_score", "request_month", "pos_words_percent", "neg_words_percent", "request_day_of_year"])
 # todo: change this have the name of the feature like the previous line
-selected_features = [1,2,4,6,7,8,14,16,17,18,27]
+selected_features = [1,2,4,6,7,8,14,16,17,18]
 
 narratives = ['money', 'job', 'student', 'family', 'craving']
 triggers = [
