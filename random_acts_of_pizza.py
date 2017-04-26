@@ -172,7 +172,7 @@ def generate_bag_of_word_features(post_texts):
 def generate_test_bag_of_word_features(post_texts):
 	return vectorizer.transform(post_texts).toarray()
 
-def train_random_forest_classifier(training_data, n_est=100, use_bag_of_words = True):
+def train_random_forest_classifier(training_data, n_est=100, use_bag_of_words = False):
 	global Training_bag_of_words_features
 	vectorizer = CountVectorizer(analyzer = "word", tokenizer = nltk.word_tokenize, preprocessor = None, stop_words = stopwords.words('english'), max_features = 10000)
 	forest = RandomForestClassifier(n_estimators=n_est, class_weight = "balanced")
@@ -247,7 +247,7 @@ def train_gaussian_NB(training_data):
 	return gnb
 
 
-def generate_submission_file(classifier, submission_filename, use_bag_of_words = True):
+def generate_submission_file(classifier, submission_filename, use_bag_of_words = False):
 	global Testing_bag_of_words_features
 	(test_data, _) = read_lines_from_file('data/test_feature_file.csv')
 	test_data = np.array(test_data)
@@ -363,7 +363,7 @@ def generate_gaussian_mixture_models(training_data,test_data,submission_filename
 
 
 if __name__ == '__main__':
-	#generate_feature_files()
+	generate_feature_files()
 	print("YOLO done generating features")
 	(training_data, _) = read_lines_from_file('data/filtered_features.csv')
 	(test_data, _) = read_lines_from_file('data/test_feature_file.csv')
