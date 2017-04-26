@@ -27,6 +27,7 @@ vectorizer = CountVectorizer(ngram_range =(3,3) , analyzer = "word", tokenizer =
 Training_bag_of_words_features = []
 Testing_bag_of_words_features = []
 selected_features = [1,2,4,6,7,8,14,16,17,18,27]
+
 headers = ["request_id",
 	"acct_age_in_days",
 	"days_since_first_post_on_raop",
@@ -232,8 +233,8 @@ def train_Logistic_regression(training_data):
 
 	clf1 = LogisticRegression(penalty = 'l1', class_weight='balanced')
 	clf1 = clf1.fit(x,y)
-
-	print("LOG REGRESSION COEFF : "+str(clf1.coef_) )#acess coefficients
+	#print(headers)
+	#print("LOG REGRESSION COEFF : "+str(clf1.coef_[0]) )#acess coefficients
 	return clf1
 
 def train_gaussian_NB(training_data):
@@ -277,37 +278,8 @@ def generate_normalized_data(training_data):
 	for i in range(1,23):
 			training_data[:,i] = training_data[:,i].astype(float)			
 			training_data[:,i] = minmax_scale.fit_transform(training_data[:,i])
-	print(training_data[0])
+
 	return training_data
-
-def voting_classifier():
-	(training_data, _) = read_lines_from_file('data/filtered_features.csv')
-	training_data = np.array(training_data)
-	clf1 = LogisticRegression(random_state=1)
-	clf2 = RandomForestClassifier(random_state=1)
-	clf3 = GaussianNB()
-	X = (training_data[:, selected_features].astype('float'))
-	y = (training_data[:, -1].astype('float'))
-	eclf1 = VotingClassifier(estimators=[
-	        ('lr', clf1), ('rf', clf2), ('gnb', clf3)], voting='hard')
-	eclf1 = eclf1.fit(X, y)
-	print(eclf1.predict(X))
-
-	eclf2 = VotingClassifier(estimators=[
-	        ('lr', clf1), ('rf', clf2), ('gnb', clf3)],
-	        voting='soft')
-	eclf2 = eclf2.fit(X, y)
-	print(eclf2.predict(X))
-
-	eclf3 = VotingClassifier(estimators=[
-	       ('lr', clf1), ('rf', clf2), ('gnb', clf3)],
-	       voting='soft', weights=[2,1,1])
-	eclf3 = eclf3.fit(X, y)
-	#print(eclf3.predict_proba(test_data[:, selected_features].astype('float')))
-	scores = cross_val_score(eclf3, training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'), cv = 5)
-	print(scores)
-	print(np.mean(scores))
-	return eclf3
 
 def generate_gaussian_mixture_models(training_data,test_data,submission_filename):
 	#training_data = generate_normalized_data(training_data)
@@ -391,7 +363,7 @@ def generate_gaussian_mixture_models(training_data,test_data,submission_filename
 
 
 if __name__ == '__main__':
-	generate_feature_files()
+	#generate_feature_files()
 	print("YOLO done generating features")
 	(training_data, _) = read_lines_from_file('data/filtered_features.csv')
 	(test_data, _) = read_lines_from_file('data/test_feature_file.csv')
@@ -401,13 +373,9 @@ if __name__ == '__main__':
 	generate_gaussian_mixture_models(training_data,test_data,"EM_numeric-features-prediction.csv")
 
 	#training_data = generate_normalized_data(training_data)
-	#print("Normalization done")
-	#print(training_data[0])
 	
 	regression = train_Logistic_regression(training_data)
-
-	print(regression.get_params())
-
+	
 	rf_est = [50, 75, 100, 125, 150]
 	dt_depth = [10, 20, 30, 40, 50]
 	erf_est = [5, 10, 15, 20, 25]
@@ -462,4 +430,4 @@ if __name__ == '__main__':
 	generate_submission_file(ada_optimal, filename)	
 	
 	print('Done!')
-
+	
