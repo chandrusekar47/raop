@@ -30,6 +30,8 @@ from keras import optimizers
 from sklearn.pipeline import Pipeline, FeatureUnion
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn import svm
+import matplotlib.pyplot as plt
+from wordcloud import WordCloud
 
 
 Word2VecModel = {}
@@ -70,7 +72,10 @@ headers = ["request_id",
 	"edited_text",
 	"narrative",
 	"success"]
-selected_features = map(headers.index, ["days_since_first_post_on_raop","no_words_posts","post_length","acct_no_of_comments_in_raop","acct_no_of_posts_in_raop", "pos_score", "neg_score", "request_month", "pos_words_percent", "neg_words_percent", "request_day_of_year"])
+selected_features = map(headers.index, ["acct_age_in_days","days_since_first_post_on_raop","acct_no_of_comments","acct_no_of_comments_in_raop","acct_no_of_posts","acct_no_of_posts_in_raop","no_of_subreddits_posted","request_month","request_day_of_year","request_day_of_month","request_hour_of_day","no_of_votes","post_karma","pos_score","neg_score","neutral_score","no_words_title","no_words_posts","title_length","post_length","pos_words_percent","neg_words_percent","neutral_words_percent","post_adj_words_percent","title_adj_words_percent","narrative"])
+text_feature_index = headers.index("edited_text")
+title_feature_index = headers.index("title")
+subreddits_posted_index = headers.index("subreddits_posted")
 # todo: change this have the name of the feature like the previous line
 selected_features = [1,2,4,6,7,8,14,16,17,18]
 
@@ -436,19 +441,19 @@ class NumericFeaturesExtractor(BaseEstimator, TransformerMixin):
 		return self
 
 	def transform(self, training_data):
-		return training_data[:, 1:24].astype('float')
+		return training_data[:, selected_features].astype('float')
 
 class BagOfWordsExtractor(BaseEstimator, TransformerMixin):
 
 	def __init__(self):
-		self.vectorizer = CountVectorizer(analyzer = "word", tokenizer = nltk.word_tokenize, preprocessor = None, stop_words = stopwords.words('english'), max_features = 5000, lowercase = True, ngram_range = (1,2))
+		self.vectorizer = CountVectorizer(analyzer = "word", tokenizer = nltk.word_tokenize, preprocessor = None, stop_words = stopwords.words('english'), max_features = 10000, lowercase = True, ngram_range = (1,2))
 
 	def fit(self, data, y=None):
-		self.vectorizer.fit([x[-3] +" "+x[-2] for x in data])
+		self.vectorizer.fit([x[title_feature_index] +" "+x[text_feature_index] for x in data])
 		return self
 
 	def transform(self, data):
-		return self.vectorizer.transform([x[-3] +" "+x[-2] for x in data])
+		return self.vectorizer.transform([x[title_feature_index] +" "+x[text_feature_index] for x in data])
 
 class Word2VecExtractor(BaseEstimator, TransformerMixin):
 
@@ -456,11 +461,11 @@ class Word2VecExtractor(BaseEstimator, TransformerMixin):
 		self.vectorizer = TfidfEmbeddingVectorizer(Word2VecModel)
 
 	def fit(self, data, y=None):
-		self.vectorizer.fit([x[-3] +" "+x[-2] for x in data])
+		self.vectorizer.fit([x[title_feature_index] +" "+x[text_feature_index] for x in data])
 		return self
 
 	def transform(self, data):
-		return self.vectorizer.transform([x[-3] +" "+x[-2] for x in data])
+		return self.vectorizer.transform([x[title_feature_index] +" "+x[text_feature_index] for x in data])
 
 def run_on_feature_union():
 	load_word_embeddings()
@@ -492,6 +497,42 @@ def run_on_feature_union():
 	print(scores)
 	print(np.mean(scores))
 
+def generate_wordcloud(data):
+	successful_requests = data[data[:, -1] == '1', :]
+	failed_requests = data[data[:, -1] == '0', :]
+	all_posts = ' '.join(successful_requests[:, text_feature_index])
+	all_posts = ' '.join([x for x in all_posts.split() if x not in stopwords.words('english')])
+	wordcloud = WordCloud().generate(all_posts)
+	plt.imshow(wordcloud, interpolation='bilinear')
+	plt.axis("off")
+	plt.show()
+	all_titles = ' '.join(successful_requests[:, title_feature_index])
+	all_titles = ' '.join([x for x in all_titles.split() if x not in stopwords.words('english')])
+	wordcloud = WordCloud().generate(all_titles)
+	plt.imshow(wordcloud, interpolation='bilinear')
+	plt.axis("off")
+	plt.show()
+	wordcloud = WordCloud().generate(' '.join(successful_requests[:, subreddits_posted_index]))
+	plt.imshow(wordcloud, interpolation='bilinear')
+	plt.axis("off")
+	plt.show()
+	all_posts = ' '.join(failed_requests[:, text_feature_index])
+	all_posts = ' '.join([x for x in all_posts.split() if x not in stopwords.words('english')])
+	wordcloud = WordCloud().generate(all_posts)
+	plt.imshow(wordcloud, interpolation='bilinear')
+	plt.axis("off")
+	plt.show()
+	all_titles = ' '.join(failed_requests[:, title_feature_index])
+	all_titles = ' '.join([x for x in all_titles.split() if x not in stopwords.words('english')])
+	wordcloud = WordCloud().generate(all_titles)
+	plt.imshow(wordcloud, interpolation='bilinear')
+	plt.axis("off")
+	plt.show()
+	wordcloud = WordCloud().generate(' '.join(failed_requests[:, subreddits_posted_index]))
+	plt.imshow(wordcloud, interpolation='bilinear')
+	plt.axis("off")
+	plt.show()
+
 if __name__ == '__main__':
 	#generate_feature_files()
 	print("YOLO done generating features")
@@ -500,6 +541,8 @@ if __name__ == '__main__':
 	test_data = np.array(test_data)
 	training_data = np.array(training_data)
 
+	# generate_wordcloud(training_data)
+	# generate_wordcloud(test_data)
 	#test_data = normalize_test_data(training_data,test_data)
 	#training_data = generate_normalized_data(training_data)
 	
