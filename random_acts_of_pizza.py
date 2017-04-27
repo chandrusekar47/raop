@@ -21,7 +21,18 @@ from sklearn.ensemble import VotingClassifier
 from sklearn.mixture import GaussianMixture
 from collections import Counter
 import sklearn.preprocessing
+import keras.models
+from keras.models import Sequential
+from keras.layers import Dense, Dropout
+import keras.backend as K
+from tfidf_embedding_vectorizer import *
+from keras import optimizers
+from sklearn.pipeline import Pipeline, FeatureUnion
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn import svm
 
+
+Word2VecModel = {}
 sentiment_analyzer = SentimentIntensityAnalyzer()
 vectorizer = CountVectorizer(ngram_range =(3,3) , analyzer = "word", tokenizer = nltk.word_tokenize, preprocessor = None, stop_words = stopwords.words('english'), max_features = 10000)
 Training_bag_of_words_features = []
@@ -38,6 +49,8 @@ headers = ["request_id",
 	"no_of_subreddits_posted",
 	"request_month",
 	"request_day_of_year",
+	"request_day_of_month",
+	"request_hour_of_day",
 	"no_of_votes",
 	"post_karma",
 	"pos_score",
@@ -59,7 +72,7 @@ headers = ["request_id",
 	"success"]
 selected_features = map(headers.index, ["days_since_first_post_on_raop","no_words_posts","post_length","acct_no_of_comments_in_raop","acct_no_of_posts_in_raop", "pos_score", "neg_score", "request_month", "pos_words_percent", "neg_words_percent", "request_day_of_year"])
 # todo: change this have the name of the feature like the previous line
-selected_features = [1,2,4,6,7,8,14,16,17,18,27]
+selected_features = [1,2,4,6,7,8,14,16,17,18]
 
 narratives = ['money', 'job', 'student', 'family', 'craving']
 triggers = [
@@ -86,6 +99,12 @@ def month_of_year(unix_timestamp):
 
 def day_of_year(unix_timestamp):
 	return int(datetime.datetime.fromtimestamp(int(unix_timestamp)).strftime('%j'))
+
+def day_of_month(unix_timestamp):
+	return int(datetime.datetime.fromtimestamp(int(unix_timestamp)).strftime('%d'))
+
+def hour_of_day(unix_timestamp):
+	return int(datetime.datetime.fromtimestamp(int(unix_timestamp)).strftime('%H'))
 
 def num_words(text):
 	return float(len(text.split(" ")))
@@ -127,6 +146,8 @@ def dict_to_csv(filename, output_file_name):
 		values.append(float(record["requester_number_of_subreddits_at_request"]))
 		values.append(month_of_year(float(record["unix_timestamp_of_request_utc"])))
 		values.append(day_of_year(float(record["unix_timestamp_of_request_utc"])))
+		values.append(day_of_month(float(record["unix_timestamp_of_request_utc"])))
+		values.append(hour_of_day(float(record["unix_timestamp_of_request_utc"])))
 		values.append(float(record["requester_upvotes_plus_downvotes_at_request"]))
 		values.append(float(record["requester_upvotes_minus_downvotes_at_request"]))
 		post_text = cleanup(record["request_text_edit_aware"])
@@ -387,6 +408,89 @@ def generate_gaussian_mixture_models(training_data,test_data,submission_filename
 	print("____________ VARIANCE OF EACH DIMENSION __________\n")
 	print(pd.DataFrame.from_items([('Cluster A', variances[0]), ('Cluster B', variances[1])],orient='index', columns=headers[indices]))
 
+def train_nn(training_data):
+	x_train = Training_bag_of_words_features
+	y_train = training_data[:, -1].astype('float')
+	model = Sequential()
+	model.add(Dense(10, input_dim=len(x_train[0]), activation='relu'))
+	model.add(Dropout(0.45))
+	model.add(Dense(1, activation='sigmoid'))
+	sgd = optimizers.SGD(lr=0.001, decay=1e-6, momentum=0.9, nesterov=True)
+	model.compile(loss='mean_squared_error',
+				  optimizer=sgd,
+				  metrics=['accuracy'])
+	model.fit(x_train, y_train, epochs=40, validation_split = 0.1)
+	return model
+
+def load_word_embeddings():
+	(embeddings, headers) = read_lines_from_file('data/raop_embeddings.csv')
+	wordvec_map = {}
+	for row in embeddings:
+		wordvec_map[row[0]] = np.array(row[1:]).astype('float')
+	Word2VecModel = wordvec_map
+	# vectorizer = TfidfEmbeddingVectorizer(Word2VecModel)
+
+class NumericFeaturesExtractor(BaseEstimator, TransformerMixin):
+
+	def fit(self, x, y=None):
+		return self
+
+	def transform(self, training_data):
+		return training_data[:, 1:24].astype('float')
+
+class BagOfWordsExtractor(BaseEstimator, TransformerMixin):
+
+	def __init__(self):
+		self.vectorizer = CountVectorizer(analyzer = "word", tokenizer = nltk.word_tokenize, preprocessor = None, stop_words = stopwords.words('english'), max_features = 5000, lowercase = True, ngram_range = (1,2))
+
+	def fit(self, data, y=None):
+		self.vectorizer.fit([x[-3] +" "+x[-2] for x in data])
+		return self
+
+	def transform(self, data):
+		return self.vectorizer.transform([x[-3] +" "+x[-2] for x in data])
+
+class Word2VecExtractor(BaseEstimator, TransformerMixin):
+
+	def __init__(self):
+		self.vectorizer = TfidfEmbeddingVectorizer(Word2VecModel)
+
+	def fit(self, data, y=None):
+		self.vectorizer.fit([x[-3] +" "+x[-2] for x in data])
+		return self
+
+	def transform(self, data):
+		return self.vectorizer.transform([x[-3] +" "+x[-2] for x in data])
+
+def run_on_feature_union():
+	load_word_embeddings()
+	(training_data, _) = read_lines_from_file('data/filtered_features.csv')
+	training_data = np.array(training_data)
+
+	#training_data = generate_normalized_data(training_data)
+	clf = RandomForestClassifier(n_estimators=100, class_weight = "balanced")
+	clf.classes_ = [0, 1]
+	clf1 = LogisticRegression(penalty = 'l1', class_weight='balanced')
+	clf1.classes_ = [0, 1]
+	adaboost = AdaBoostClassifier(n_estimators=100)
+	adaboost.classes_ = [0, 1]
+	svm_clf = svm.SVC(probability = True)
+	svm_clf.classes_ = [0, 1]
+	randomized = ExtraTreesClassifier(n_estimators=45, max_depth=None, min_samples_split=2, class_weight = "balanced")
+	randomized.classes_ = [0, 1]
+	pipeline = Pipeline([('features', FeatureUnion([
+		('numeric_features', NumericFeaturesExtractor()),
+		('bag_of_words_features', BagOfWordsExtractor()),
+		('w2v_features', Word2VecExtractor())
+		], transformer_weights={
+            'numeric_features': 0.8,
+            'bag_of_words_features': 0.5,
+            'w2v_features': 1.0,
+        })), ('clf', clf)])
+	pipeline.fit(training_data, training_data[:, -1].astype('float'))
+	scores = cross_val_score(pipeline, training_data, training_data[:, -1].astype('float'), cv = 10)
+	print(scores)
+	print(np.mean(scores))
 
 if __name__ == '__main__':
 	#generate_feature_files()
@@ -458,4 +562,6 @@ if __name__ == '__main__':
 	
 	print('Done!')
 	
-	
+
+	# run_on_feature_union()
+
