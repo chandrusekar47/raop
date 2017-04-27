@@ -207,10 +207,10 @@ def train_random_forest_classifier(training_data, n_est=100, use_bag_of_words = 
 		if Training_bag_of_words_features == []:
 			Training_bag_of_words_features = generate_bag_of_word_features(training_data[:, -2])
 		forest = forest.fit(Training_bag_of_words_features, training_data[:, -1].astype('float'))
-		scores = cross_val_score(forest, Training_bag_of_words_features, training_data[:, -1].astype('float'), cv = 5)
+		scores = cross_val_score(forest, Training_bag_of_words_features, training_data[:, -1].astype('float'), cv = 5, scoring='roc_auc')
 	else:
 		forest = forest.fit(training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'))
-		scores = cross_val_score(forest, training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'), cv = 5)
+		scores = cross_val_score(forest, training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'), cv = 5, scoring='roc_auc')
 	print("Scores gotten using Random Forest (# of estimators="+str(n_est)+")")
 	print(scores)
 	print(np.mean(scores))
@@ -219,7 +219,7 @@ def train_random_forest_classifier(training_data, n_est=100, use_bag_of_words = 
 def train_decision_tree_classifer(training_data, depth=50):
 	dtree = DecisionTreeClassifier(max_depth=depth, min_samples_split=2,class_weight = "balanced")
 	dtree.classes_ = [0, 1]
-	scores = cross_val_score(dtree, training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'), cv = 5)
+	scores = cross_val_score(dtree, training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'), cv = 5, scoring='roc_auc')
 	print("Scores gotten using Decision Tree (max depth="+str(depth)+")")
 	print(scores)
 	print(np.mean(scores))
@@ -228,7 +228,7 @@ def train_decision_tree_classifer(training_data, depth=50):
 def train_extra_Randomized_forest_classifer(training_data, n_est=10):
 	randomized = ExtraTreesClassifier(n_estimators=n_est, max_depth=None, min_samples_split=2, class_weight = "balanced")
 	randomized.classes_ = [0, 1]
-	scores = cross_val_score(randomized, training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'), cv = 10)
+	scores = cross_val_score(randomized, training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'), cv = 10, scoring='roc_auc')
 	print("Scores gotten using Extra Randomized Forests (# of estimators="+str(n_est)+")")
 	print(scores)
 	print(np.mean(scores))
@@ -237,7 +237,7 @@ def train_extra_Randomized_forest_classifer(training_data, n_est=10):
 def train_AdaBoost_classifier(training_data, n_est):
 	adaboost = AdaBoostClassifier(n_estimators=n_est)
 	adaboost.classes_ = [0, 1]
-	scores = cross_val_score(adaboost, training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'), cv = 10)
+	scores = cross_val_score(adaboost, training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'), cv = 10, scoring='roc_auc')
 	adaboost = adaboost.fit(training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'))
 	print("Scores gotten using AdaBoost classifier (# of estimators="+str(n_est)+")")
 	print(scores)
@@ -247,7 +247,7 @@ def train_AdaBoost_classifier(training_data, n_est):
 def train_ensemble_classifier(training_data,forest, dtree, adaboost, extra_random, gnb, regression):
 	ensemble = VotingClassifier(estimators=[('rf', forest), ('dt', dtree), ('et',extra_random),('gnb',gnb),('lr',regression)], voting='hard')
 	ensemble.classes_ = [0, 1]
-	scores = cross_val_score(ensemble, training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'), cv = 5)
+	scores = cross_val_score(ensemble, training_data[:, selected_features].astype('float'), training_data[:, -1].astype('float'), cv = 5, scoring='roc_auc')
 	print("Scores gotten using Ensemble classifier")
 	print(str(scores))
 	print(np.mean(scores))
@@ -475,8 +475,6 @@ def run_on_feature_union():
 	#training_data = generate_normalized_data(training_data)
 	clf = RandomForestClassifier(n_estimators=100, class_weight = "balanced")
 	clf.classes_ = [0, 1]
-	clf1 = LogisticRegression(penalty = 'l1', class_weight='balanced')
-	clf1.classes_ = [0, 1]
 	adaboost = AdaBoostClassifier(n_estimators=100)
 	adaboost.classes_ = [0, 1]
 	svm_clf = svm.SVC(probability = True)
@@ -488,12 +486,12 @@ def run_on_feature_union():
 		('bag_of_words_features', BagOfWordsExtractor()),
 		('w2v_features', Word2VecExtractor())
 		], transformer_weights={
-            'numeric_features': 0.8,
-            'bag_of_words_features': 0.5,
+            'numeric_features': 0.5,
+            'bag_of_words_features': 0.9,
             'w2v_features': 1.0,
         })), ('clf', clf)])
 	pipeline.fit(training_data, training_data[:, -1].astype('float'))
-	scores = cross_val_score(pipeline, training_data, training_data[:, -1].astype('float'), cv = 10)
+	scores = cross_val_score(pipeline, training_data, training_data[:, -1].astype('float'), cv = 10, scoring='roc_auc')
 	print(scores)
 	print(np.mean(scores))
 
