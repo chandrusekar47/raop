@@ -268,6 +268,32 @@ def generate_feature_files():
 	dict_to_csv('data/train.json', 'data/filtered_features.csv')
 	dict_to_csv('data/test.json', 'data/test_feature_file.csv')
 
+def normalize_test_data(training_data,test_data):
+	n = len(test_data)
+	dim = len(test_data[0])
+
+	selected = [1,2,4,6,7,8,14,16,17,18]
+	map_selected = [0,1,2,3,4,5,6,7,8,9]
+	dictionary = dict(zip(selected, map_selected))
+
+	training_max = []
+	training_min = []
+	diff_max_min = []
+
+	#find max and min values of training data 
+	for i in selected:
+			temp = training_data[:,i].astype(float)
+			training_max.append(max(temp))
+			training_min.append(min(temp))
+	training_max = np.array(training_max)
+	training_min = np.array(training_min)
+	diff_max_min = np.array( training_max - training_min)
+
+	#normalizing test data with train data's min max valuess
+	for i in selected:
+		test_data[:,i] = (test_data[:,i].astype('float') - training_max[dictionary[i]])/diff_max_min[dictionary[i]]
+	return test_data	
+
 def generate_normalized_data(training_data):
 	num_records = len(training_data)
 	dimension = len(training_data[0])
@@ -311,7 +337,7 @@ def generate_gaussian_mixture_models(training_data,test_data,submission_filename
 	"title",
 	"edited_text",
 	"success"]
-
+	selected_features = [1,2,4,6,7,8,14,16,17,18]
 	x = (training_data[:, selected_features].astype('float'))
 	y = (training_data[:, -1].astype('float'))
 
@@ -363,17 +389,18 @@ def generate_gaussian_mixture_models(training_data,test_data,submission_filename
 
 
 if __name__ == '__main__':
-	generate_feature_files()
+	#generate_feature_files()
 	print("YOLO done generating features")
 	(training_data, _) = read_lines_from_file('data/filtered_features.csv')
 	(test_data, _) = read_lines_from_file('data/test_feature_file.csv')
 	test_data = np.array(test_data)
 	training_data = np.array(training_data)
 
-	generate_gaussian_mixture_models(training_data,test_data,"EM_numeric-features-prediction.csv")
-
+	#test_data = normalize_test_data(training_data,test_data)
 	#training_data = generate_normalized_data(training_data)
 	
+	generate_gaussian_mixture_models(training_data,test_data,"EM_numeric-features-prediction.csv")
+
 	regression = train_Logistic_regression(training_data)
 	
 	rf_est = [50, 75, 100, 125, 150]
@@ -430,4 +457,5 @@ if __name__ == '__main__':
 	generate_submission_file(ada_optimal, filename)	
 	
 	print('Done!')
+	
 	
